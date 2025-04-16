@@ -137,7 +137,7 @@ export function ListaPedidos() {
                   </span>
                   <Link
                     href={`/pedidos/${pedido.id}?numero=${pedido.numero}`}
-                    className="text-[#6D28D9] font-bold hover:underline"
+                    className="text-orange-500 font-bold hover:underline"
                   >
                     Conferir
                   </Link>
@@ -190,9 +190,9 @@ export function ListaPedidos() {
               <h2 className="text-lg font-bold text-yellow-500">⚠️ Pedidos com Pendências</h2>
             </div>
             <ul className="ml-4 mt-2 space-y-2">
-              {filtrarPedidos(pedidos.pendentes).filter(p => p.quantidade_faltante > 0).length > 0 ? (
+              {filtrarPedidos(pedidos.pendentes).filter(p => (p.quantidade_faltante ?? 0) > 0).length > 0 ? (
                 filtrarPedidos(pedidos.pendentes)
-                  .filter(p => p.quantidade_faltante > 0)
+                  .filter(p => (p.quantidade_faltante ?? 0) > 0)
                   .map((pedido) => (
                     <li key={pedido.id} className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center">
                       <span className="text-card-foreground">
