@@ -340,9 +340,9 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
 
       // Define a mensagem apropriada
       if (atualizacoes.length > 0) {
-        setMensagem("✅ Conferência atualizada. Ainda existem itens pendentes.");
+        setMensagem("⚠️ Pedido atualizado com itens pendentes");
       } else {
-        setMensagem("✅ Todos os itens foram conferidos com sucesso!");
+        setMensagem("✅ Todos os itens foram recebidos!");
       }
 
       // Limpa as quantidades de atualização
@@ -351,8 +351,8 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
       // Recarrega os dados para atualizar a visualização
       await carregarDados();
 
-      // Redireciona após 2 segundos
-      setTimeout(() => router.push("/pedidos"), 2000);
+      // Redireciona após 3,5 segundos
+      setTimeout(() => router.push("/pedidos"), 3500);
     } catch (error) {
       console.error("Erro ao processar a conferência:", error);
       setMensagem("Erro ao processar a conferência.");
@@ -402,7 +402,7 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
 
       {modo === "pendente" && produtosExibidos.length === 0 ? (
         <div className="text-center p-8 bg-card rounded-lg">
-          <span className="text-green-500 text-lg">✅ Todos os itens foram conferidos com sucesso!</span>
+          <span className="text-green-500 text-lg">✅ Todos os itens foram recebidos!</span>
         </div>
       ) : (
         <div className="bg-card rounded-lg overflow-hidden border border-border">
@@ -511,8 +511,10 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
       )}
 
       {mensagem && (
-        <div className="mt-4 p-4 bg-card rounded-lg text-center">
-          <p className="text-green-500">{mensagem}</p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center transition-all duration-300">
+          <div className="bg-background p-6 rounded-lg shadow-lg text-center transform scale-100 transition-transform duration-300">
+            <p className="text-2xl font-medium">{mensagem}</p>
+          </div>
         </div>
       )}
 

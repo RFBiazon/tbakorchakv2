@@ -63,6 +63,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
   const [responsavel, setResponsavel] = useState("")
   const [salvando, setSalvando] = useState(false)
   const [motivosPersonalizados, setMotivosPersonalizados] = useState<{ [key: string]: string }>({})
+  const [redirecionar, setRedirecionar] = useState(false)
 
   useEffect(() => {
     carregarPedido()
@@ -144,16 +145,6 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
       }
       return novos
     })
-  }
-
-  function marcarTudoRecebido() {
-    setProdutos((prev) =>
-      prev.map((p) => ({
-        ...p,
-        recebido: p.quantidade,
-        motivo: "",
-      })),
-    )
   }
 
   function abrirModalResponsavel() {
@@ -279,8 +270,13 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
         throw new Error(`Erro ao salvar conferência: ${conferenciaResult.error}`)
       }
 
-      setMensagem(pendencias.length > 0 ? "✅ Conferência salva com itens pendentes." : "✅ Conferência salva sem pendências.")
-      setTimeout(() => router.push("/pedidos"), 2000)
+      // Atualiza a mensagem e inicia a transição
+      setMensagem(pendencias.length > 0 
+        ? "⚠️ Pedido conferido com itens pendentes" 
+        : "✅ Pedido conferido sem pendências"
+      )
+      setRedirecionar(true)
+      setTimeout(() => router.push("/pedidos"), 3500)
     } catch (error: any) {
       console.error("Erro na operação:", error)
       console.error("Detalhes completos:", {
@@ -321,6 +317,17 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
       }
       return novos
     })
+  }
+
+  // Função para calcular o status atual do pedido
+  const calcularStatusPedido = () => {
+    const totalItens = produtos.reduce((acc, p) => acc + p.quantidade, 0)
+    const totalRecebido = produtos.reduce((acc, p) => acc + p.recebido, 0)
+    const itensFaltantes = totalItens - totalRecebido
+
+    if (totalRecebido === 0) return `📦 Total: ${totalItens} itens`
+    if (itensFaltantes === 0) return "✅ Tudo Recebido"
+    return `⚠️ ${itensFaltantes} ${itensFaltantes === 1 ? 'Item Pendente' : 'Itens Pendentes'}`
   }
 
   if (loading) {
@@ -380,6 +387,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
                       size="icon"
                       className="h-8 w-8 p-0 text-foreground"
                       onClick={() => ajustarQuantidade(index, -1)}
+                      disabled={produto.recebido <= 0}
                     >
                       -
                     </Button>
@@ -394,13 +402,16 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
                       size="icon"
                       className="h-8 w-8 p-0 text-foreground"
                       onClick={() => ajustarQuantidade(index, 1)}
+                      disabled={produto.recebido >= produto.quantidade}
                     >
                       +
                     </Button>
                   </div>
                 </td>
                 <td className="p-2">
-                  {produto.recebido < produto.quantidade && (
+                  {produto.recebido === produto.quantidade ? (
+                    <div className="text-green-500 font-medium">✅ Completo</div>
+                  ) : produto.recebido < produto.quantidade ? (
                     <div className="space-y-2">
                       <Select 
                         value={produto.motivo === "Outros" || motivosPersonalizados[index] ? "Outros" : produto.motivo}
@@ -435,7 +446,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
                         />
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -443,17 +454,29 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
         </table>
       </div>
 
-      <div className="flex flex-col md:flex-row justify-end w-full mb-4 gap-2">
-        <Button variant="secondary" onClick={marcarTudoRecebido} className="w-full md:w-auto">
-          ✅ Tudo Recebido
+      <div className="flex justify-end mb-2">
+        <div className="text-lg font-medium">
+          {calcularStatusPedido()}
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-start w-full mb-4 gap-2">
+        <Button variant="default" onClick={abrirModalResponsavel} className="w-full md:w-auto" disabled={salvando}>
+          {salvando ? "Salvando..." : "Salvar Conferência"}
         </Button>
       </div>
 
-      <Button variant="default" onClick={abrirModalResponsavel} className="w-full md:w-auto" disabled={salvando}>
-        {salvando ? "Salvando..." : "Salvar Conferência"}
-      </Button>
+      {mensagem && redirecionar && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center transition-all duration-300">
+          <div className="bg-background p-6 rounded-lg shadow-lg text-center transform scale-100 transition-transform duration-300">
+            <p className="text-2xl font-medium">{mensagem}</p>
+          </div>
+        </div>
+      )}
 
-      {mensagem && <p className="mt-4 text-center text-primary">{mensagem}</p>}
+      {mensagem && !redirecionar && (
+        <p className="mt-4 text-center text-primary">{mensagem}</p>
+      )}
 
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
         <DialogContent className="bg-background [&_*]:text-black dark:[&_*]:text-white">

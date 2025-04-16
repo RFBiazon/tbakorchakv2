@@ -137,7 +137,7 @@ export function ListaPedidos() {
                   </span>
                   <Link
                     href={`/pedidos/${pedido.id}?numero=${pedido.numero}`}
-                    className="text-orange-500 font-bold hover:underline"
+                    className="text-[#6D28D9] font-bold hover:underline"
                   >
                     Conferir
                   </Link>

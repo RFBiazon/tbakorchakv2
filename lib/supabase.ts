@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://osemdcmygzkrccaaqyvj.supabase.co"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://nojdvbttiqcsbztyvgdl.supabase.co"
 const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zZW1kY215Z3prcmNjYWFxeXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NDkzMjgsImV4cCI6MjA1OTUyNTMyOH0.BD1jvnLWleSA74_oF2sOH0Ux2A10YHg-Gy8UDlOOgI0"
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vamR2YnR0aXFjc2J6dHl2Z2RsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg5NjQsImV4cCI6MjA2MDM0NDk2NH0.-J5lm04L4eeKCeN2JHEjD5F-6XcsexpZDqyxBalP1eE"
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
@@ -79,10 +79,10 @@ export async function getPedidos() {
     const linhas = doc.content.split("\n")
     let totalItens = 0
 
-    linhas.forEach((linha) => {
+    linhas.forEach((linha: string) => {
       const ignorar = /total|peso|valor|Num\. Pedido|OBSERVACAO|PRODUTO/i
       if (!ignorar.test(linha)) {
-        const col = linha.split(",").map((x) => x.replaceAll('"', "").trim())
+        const col = linha.split(",").map((x: string) => x.replaceAll('"', "").trim())
         const produto = col[0]
         const quantidade = Number.parseInt(col[1])
         if (produto && !isNaN(quantidade)) {
