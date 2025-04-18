@@ -1,0 +1,170 @@
+warning: in the working copy of 'lib/supabase.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/lib/supabase.ts b/lib/supabase.ts[m
+[1mindex e37d0cc..ab05d76 100644[m
+[1m--- a/lib/supabase.ts[m
+[1m+++ b/lib/supabase.ts[m
+[36m@@ -1,15 +1,56 @@[m
+ import { createClient } from "@supabase/supabase-js"[m
+[32m+[m[32mimport { supabaseCredentials } from "./supabase-credentials"[m
+[32m+[m
+[32m+[m[32m// Função para obter as credenciais da loja atual[m
+[32m+[m[32mfunction getSupabaseCredentials() {[m
+[32m+[m[32m  if (typeof window === 'undefined') {[m
+[32m+[m[32m    return {[m
+[32m+[m[32m      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",[m
+[32m+[m[32m      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m[41m  [m
+[32m+[m[32m  const loja = localStorage.getItem("selectedLoja")[m
+[32m+[m[32m  if (!loja) {[m
+[32m+[m[32m    return {[m
+[32m+[m[32m      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",[m
+[32m+[m[32m      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+ [m
+[31m-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co"[m
+[31m-const supabaseKey =[m
+[31m-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||[m
+[31m-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"[m
+[31m-[m
+[31m-export const supabase = createClient(supabaseUrl, supabaseKey, {[m
+[31m-  auth: {[m
+[31m-    persistSession: true[m
+[32m+[m[32m  const credentials = supabaseCredentials[loja as keyof typeof supabaseCredentials][m
+[32m+[m[32m  if (!credentials) {[m
+[32m+[m[32m    console.warn("Credenciais não encontradas para a loja:", loja)[m
+[32m+[m[32m    return {[m
+[32m+[m[32m      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",[m
+[32m+[m[32m      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"[m
+[32m+[m[32m    }[m
+   }[m
+[31m-})[m
+[32m+[m
+[32m+[m[32m  return credentials[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Função para criar um novo cliente Supabase[m
+[32m+[m[32mfunction createSupabaseClient() {[m
+[32m+[m[32m  const credentials = getSupabaseCredentials()[m
+[32m+[m[32m  console.log("Criando cliente Supabase para a loja:", localStorage?.getItem("selectedLoja"))[m
+[32m+[m[32m  console.log("URL:", credentials.url)[m
+[32m+[m[41m  [m
+[32m+[m[32m  return createClient(credentials.url, credentials.anonKey, {[m
+[32m+[m[32m    auth: {[m
+[32m+[m[32m      persistSession: true,[m
+[32m+[m[32m      storageKey: `sb-${localStorage?.getItem("selectedLoja") || 'default'}`[m
+[32m+[m[32m    }[m
+[32m+[m[32m  })[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Função para obter o cliente Supabase atual[m
+[32m+[m[32mexport function getSupabaseClient() {[m
+[32m+[m[32m  return createSupabaseClient()[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Exportar uma função que retorna um novo cliente Supabase[m
+[32m+[m[32mexport const supabase = createSupabaseClient()[m
+ [m
+ export type Pedido = {[m
+   id: number[m
+[36m@@ -53,6 +94,7 @@[m [mexport type Conferido = {[m
+ }[m
+ [m
+ export async function getPedidos() {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   const { data: documents, error: documentsError } = await supabase.from("documents").select("id, content")[m
+ [m
+   if (documentsError) throw documentsError[m
+[36m@@ -234,14 +276,15 @@[m [mexport function desarquivarPedido(pedidoId: number) {[m
+ }[m
+ [m
+ export async function getPedidoById(pedidoId: string | number) {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   try {[m
+[31m-  const { data, error } = await supabase.from("documents").select("content").eq("id", pedidoId).single()[m
+[32m+[m[32m    const { data, error } = await supabase.from("documents").select("content").eq("id", pedidoId).single()[m
+ [m
+     if (error) {[m
+       console.error(`❌ Erro ao buscar pedido ${pedidoId}:`, error)[m
+       throw error[m
+     }[m
+[31m-  return data[m
+[32m+[m[32m    return data[m
+   } catch (error) {[m
+     console.error(`❌ Erro detalhado ao buscar pedido ${pedidoId}:`, error)[m
+     throw error[m
+[36m@@ -249,19 +292,20 @@[m [mexport async function getPedidoById(pedidoId: string | number) {[m
+ }[m
+ [m
+ export async function getConferenciaById(pedidoId: string | number) {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   try {[m
+[31m-  const { data, error } = await supabase[m
+[31m-    .from("conferidos")[m
+[31m-    .select("*")[m
+[31m-    .eq("pedido_id", pedidoId)[m
+[31m-    .order("data", { ascending: false })[m
+[31m-    .limit(1)[m
+[32m+[m[32m    const { data, error } = await supabase[m
+[32m+[m[32m      .from("conferidos")[m
+[32m+[m[32m      .select("*")[m
+[32m+[m[32m      .eq("pedido_id", pedidoId)[m
+[32m+[m[32m      .order("data", { ascending: false })[m
+[32m+[m[32m      .limit(1)[m
+ [m
+     if (error) {[m
+       console.error(`❌ Erro ao buscar conferência do pedido ${pedidoId}:`, error)[m
+       throw error[m
+     }[m
+[31m-  return data?.[0][m
+[32m+[m[32m    return data?.[0][m
+   } catch (error) {[m
+     console.error(`❌ Erro detalhado ao buscar conferência do pedido ${pedidoId}:`, error)[m
+     throw error[m
+[36m@@ -269,6 +313,7 @@[m [mexport async function getConferenciaById(pedidoId: string | number) {[m
+ }[m
+ [m
+ export async function getPendenciasByPedidoId(pedidoId: string | number) {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   try {[m
+     const { data, error } = await supabase[m
+       .from('pendencias')[m
+[36m@@ -279,7 +324,7 @@[m [mexport async function getPendenciasByPedidoId(pedidoId: string | number) {[m
+       console.error(`❌ Erro ao buscar pendências do pedido ${pedidoId}:`, error)[m
+       throw error[m
+     }[m
+[31m-  return data || [][m
+[32m+[m[32m    return data || [][m
+   } catch (error) {[m
+     console.error(`❌ Erro detalhado ao buscar pendências do pedido ${pedidoId}:`, error)[m
+     throw error[m
+[36m@@ -287,14 +332,15 @@[m [mexport async function getPendenciasByPedidoId(pedidoId: string | number) {[m
+ }[m
+ [m
+ export async function getAllPendencias() {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   try {[m
+[31m-  const { data, error } = await supabase.from("pendencias").select("*")[m
+[32m+[m[32m    const { data, error } = await supabase.from("pendencias").select("*")[m
+ [m
+     if (error) {[m
+       console.error("❌ Erro ao buscar todas as pendências:", error)[m
+       throw error[m
+     }[m
+[31m-  return data || [][m
+[32m+[m[32m    return data || [][m
+   } catch (error) {[m
+     console.error("❌ Erro detalhado ao buscar todas as pendências:", error)[m
+     throw error[m
+[36m@@ -302,32 +348,33 @@[m [mexport async function getAllPendencias() {[m
+ }[m
+ [m
+ export async function salvarConferencia(dados: any) {[m
+[32m+[m[32m  const supabase = getSupabaseClient()[m
+   try {[m
+[31m-  const { data: existingData, error: checkError } = await supabase[m
+[31m-    .from("conferidos")[m
+[31m-    .select("id")[m
+[31m-  

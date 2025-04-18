@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 
 const lojas = [
   { id: "toledo01", nome: "Toledo 01", email: "toledo01@neosystems.ai" },
@@ -43,6 +43,11 @@ export function LoginForm() {
     }
 
     try {
+      // Primeiro salva a loja selecionada no localStorage
+      localStorage.setItem("selectedLoja", loja)
+
+      // Tenta fazer login com as credenciais da loja
+      const supabase = getSupabaseClient()
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -55,8 +60,7 @@ export function LoginForm() {
       }
 
       if (data.user) {
-        localStorage.setItem("selectedLoja", loja)
-        router.push("/dashboard")
+        router.push("/pedidos")
       }
     } catch (err) {
       console.error("Erro ao fazer login:", err)

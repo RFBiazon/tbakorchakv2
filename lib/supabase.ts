@@ -1,15 +1,56 @@
 import { createClient } from "@supabase/supabase-js"
+import { supabaseCredentials } from "./supabase-credentials"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co"
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
-
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true
+// Função para obter as credenciais da loja atual
+function getSupabaseCredentials() {
+  if (typeof window === 'undefined') {
+    return {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
+      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
+    }
   }
-})
+  
+  const loja = localStorage.getItem("selectedLoja")
+  if (!loja) {
+    return {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
+      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
+    }
+  }
+
+  const credentials = supabaseCredentials[loja as keyof typeof supabaseCredentials]
+  if (!credentials) {
+    console.warn("Credenciais não encontradas para a loja:", loja)
+    return {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
+      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
+    }
+  }
+
+  return credentials
+}
+
+// Função para criar um novo cliente Supabase
+function createSupabaseClient() {
+  const credentials = getSupabaseCredentials()
+  console.log("Criando cliente Supabase para a loja:", localStorage?.getItem("selectedLoja"))
+  console.log("URL:", credentials.url)
+  
+  return createClient(credentials.url, credentials.anonKey, {
+    auth: {
+      persistSession: true,
+      storageKey: `sb-${localStorage?.getItem("selectedLoja") || 'default'}`
+    }
+  })
+}
+
+// Função para obter o cliente Supabase atual
+export function getSupabaseClient() {
+  return createSupabaseClient()
+}
+
+// Exportar uma função que retorna um novo cliente Supabase
+export const supabase = createSupabaseClient()
 
 export type Pedido = {
   id: number
@@ -53,6 +94,7 @@ export type Conferido = {
 }
 
 export async function getPedidos() {
+  const supabase = getSupabaseClient()
   const { data: documents, error: documentsError } = await supabase.from("documents").select("id, content")
 
   if (documentsError) throw documentsError
@@ -234,14 +276,15 @@ export function desarquivarPedido(pedidoId: number) {
 }
 
 export async function getPedidoById(pedidoId: string | number) {
+  const supabase = getSupabaseClient()
   try {
-  const { data, error } = await supabase.from("documents").select("content").eq("id", pedidoId).single()
+    const { data, error } = await supabase.from("documents").select("content").eq("id", pedidoId).single()
 
     if (error) {
       console.error(`❌ Erro ao buscar pedido ${pedidoId}:`, error)
       throw error
     }
-  return data
+    return data
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pedido ${pedidoId}:`, error)
     throw error
@@ -249,19 +292,20 @@ export async function getPedidoById(pedidoId: string | number) {
 }
 
 export async function getConferenciaById(pedidoId: string | number) {
+  const supabase = getSupabaseClient()
   try {
-  const { data, error } = await supabase
-    .from("conferidos")
-    .select("*")
-    .eq("pedido_id", pedidoId)
-    .order("data", { ascending: false })
-    .limit(1)
+    const { data, error } = await supabase
+      .from("conferidos")
+      .select("*")
+      .eq("pedido_id", pedidoId)
+      .order("data", { ascending: false })
+      .limit(1)
 
     if (error) {
       console.error(`❌ Erro ao buscar conferência do pedido ${pedidoId}:`, error)
       throw error
     }
-  return data?.[0]
+    return data?.[0]
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar conferência do pedido ${pedidoId}:`, error)
     throw error
@@ -269,6 +313,7 @@ export async function getConferenciaById(pedidoId: string | number) {
 }
 
 export async function getPendenciasByPedidoId(pedidoId: string | number) {
+  const supabase = getSupabaseClient()
   try {
     const { data, error } = await supabase
       .from('pendencias')
@@ -279,7 +324,7 @@ export async function getPendenciasByPedidoId(pedidoId: string | number) {
       console.error(`❌ Erro ao buscar pendências do pedido ${pedidoId}:`, error)
       throw error
     }
-  return data || []
+    return data || []
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pendências do pedido ${pedidoId}:`, error)
     throw error
@@ -287,14 +332,15 @@ export async function getPendenciasByPedidoId(pedidoId: string | number) {
 }
 
 export async function getAllPendencias() {
+  const supabase = getSupabaseClient()
   try {
-  const { data, error } = await supabase.from("pendencias").select("*")
+    const { data, error } = await supabase.from("pendencias").select("*")
 
     if (error) {
       console.error("❌ Erro ao buscar todas as pendências:", error)
       throw error
     }
-  return data || []
+    return data || []
   } catch (error) {
     console.error("❌ Erro detalhado ao buscar todas as pendências:", error)
     throw error
@@ -302,32 +348,33 @@ export async function getAllPendencias() {
 }
 
 export async function salvarConferencia(dados: any) {
+  const supabase = getSupabaseClient()
   try {
-  const { data: existingData, error: checkError } = await supabase
-    .from("conferidos")
-    .select("id")
-    .eq("pedido_id", dados.pedido_id)
-    .order("data", { ascending: false })
-    .limit(1)
+    const { data: existingData, error: checkError } = await supabase
+      .from("conferidos")
+      .select("id")
+      .eq("pedido_id", dados.pedido_id)
+      .order("data", { ascending: false })
+      .limit(1)
 
-  if (checkError) throw checkError
+    if (checkError) throw checkError
 
-  let result
-  if (existingData && existingData.length > 0) {
-    // Atualizar registro existente
+    let result
+    if (existingData && existingData.length > 0) {
+      // Atualizar registro existente
       result = await supabase
         .from("conferidos")
         .update(dados)
         .eq("id", existingData[0].id)
-  } else {
-    // Inserir novo registro
+    } else {
+      // Inserir novo registro
       result = await supabase
         .from("conferidos")
         .insert([dados])
-  }
+    }
 
     if (result.error) throw result.error
-  return result
+    return result
   } catch (error) {
     console.error("Erro detalhado ao salvar conferência:", error)
     throw error
@@ -346,6 +393,7 @@ export async function salvarPendencias(dados: {
   }>,
   responsavel: string
 }) {
+  const supabase = getSupabaseClient()
   try {
     if (!dados.produtos || dados.produtos.length === 0) {
       return { data: null, error: null }
@@ -385,6 +433,7 @@ export async function salvarPendencias(dados: {
 }
 
 export async function deletarPendencias(pedidoId: string | number) {
+  const supabase = getSupabaseClient()
   try {
     const { error } = await supabase
       .from('pendencias')
@@ -395,7 +444,7 @@ export async function deletarPendencias(pedidoId: string | number) {
       console.error(`❌ Erro ao deletar pendências do pedido ${pedidoId}:`, error)
       throw error
     }
-  return { error: null }
+    return { error: null }
   } catch (error) {
     console.error(`❌ Erro detalhado ao deletar pendências do pedido ${pedidoId}:`, error)
     throw error
