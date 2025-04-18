@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getSupabaseClient } from "@/lib/supabase"
+import { updateSupabaseCredentials, getSupabaseClient } from "@/lib/supabase"
 
 const lojas = [
   { id: "toledo01", nome: "Toledo 01", email: "toledo01@neosystems.ai" },
@@ -21,6 +21,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
   // Atualiza o email automaticamente quando a loja é selecionada
@@ -36,35 +37,52 @@ export function LoginForm() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setIsLoading(true)
 
     if (!loja) {
       setError("Por favor, selecione uma loja")
+      setIsLoading(false)
       return
     }
 
     try {
-      // Primeiro salva a loja selecionada no localStorage
-      localStorage.setItem("selectedLoja", loja)
+      // Limpa qualquer sessão existente
+      await getSupabaseClient().auth.signOut()
+      localStorage.removeItem("selectedStore")
+      
+      // Atualiza o cliente Supabase com as credenciais da loja selecionada
+      const supabase = updateSupabaseCredentials(loja)
+      console.log(`🔄 Tentando login na loja: ${loja}`)
 
       // Tenta fazer login com as credenciais da loja
-      const supabase = getSupabaseClient()
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        console.error("Erro de login:", error)
+      if (signInError) {
+        console.error("Erro de login:", signInError)
         setError("Email ou senha inválidos")
+        setIsLoading(false)
         return
       }
 
       if (data.user) {
-        router.push("/pedidos")
+        console.log(`✅ Login bem-sucedido na loja: ${loja}`)
+        
+        // Verifica se a sessão foi criada corretamente
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          throw new Error("Sessão não criada após login")
+        }
+
+        // Redireciona para a página inicial do dashboard
+        router.push("/dashboard")
       }
     } catch (err) {
       console.error("Erro ao fazer login:", err)
-      setError("Erro ao tentar fazer login")
+      setError("Erro ao tentar fazer login. Por favor, tente novamente.")
+      setIsLoading(false)
     }
   }
 
@@ -79,7 +97,7 @@ export function LoginForm() {
         <div className="space-y-4">
           <div>
             <Label htmlFor="loja" className="text-foreground">Loja</Label>
-            <Select value={loja} onValueChange={setLoja}>
+            <Select value={loja} onValueChange={setLoja} disabled={isLoading}>
               <SelectTrigger className="bg-background border-input">
                 <SelectValue placeholder="Selecione uma loja" />
               </SelectTrigger>
@@ -103,6 +121,7 @@ export function LoginForm() {
               required
               className="bg-background border-input text-foreground"
               readOnly
+              disabled={isLoading}
             />
           </div>
 
@@ -115,6 +134,7 @@ export function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="bg-background border-input text-foreground"
+              disabled={isLoading}
             />
           </div>
         </div>
@@ -123,11 +143,12 @@ export function LoginForm() {
           <div className="text-destructive text-sm text-center">{error}</div>
         )}
 
-        <Button 
+        <Button
           type="submit" 
           className="w-full bg-[hsl(var(--conferir))] hover:bg-[hsl(var(--conferir))/90] text-white"
+          disabled={isLoading}
         >
-          Entrar
+          {isLoading ? "Entrando..." : "Entrar"}
         </Button>
       </form>
     </div>

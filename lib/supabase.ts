@@ -1,62 +1,202 @@
-import { createClient } from "@supabase/supabase-js"
-import { supabaseCredentials } from "./supabase-credentials"
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
-// Função para obter as credenciais da loja atual
-function getSupabaseCredentials() {
-  // Credenciais padrão (Toledo 02)
-  const defaultCredentials = {
+const isBrowser = typeof window !== "undefined"
+
+interface StoreCredentials {
+  url: string
+  key: string
+}
+
+// Interfaces para os tipos de dados do Supabase
+interface Document {
+  id: number
+  content: string
+}
+
+interface ConferidoRecord {
+  pedido_id: number
+  quantidade_recebida: number
+  total_conferida: number
+}
+
+interface PendenciaRecord {
+  pedido_id: string
+  quantidade_pedida: number
+  quantidade_recebida: number
+  total_pendentes?: number
+}
+
+// Mapeamento de credenciais das lojas
+const storeCredentials: Record<string, StoreCredentials> = {
+  toledo01: {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL_TOLEDO01 || "",
+    key: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO01 || "",
+  },
+  toledo02: {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL_TOLEDO02 || "",
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02 || ""
+    key: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02 || "",
+  },
+  videira: {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL_VIDEIRA || "",
+    key: process.env.NEXT_PUBLIC_SUPABASE_KEY_VIDEIRA || "",
+  },
+  fraiburgo: {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL_FRAIBURGO || "",
+    key: process.env.NEXT_PUBLIC_SUPABASE_KEY_FRAIBURGO || "",
+  },
+  campomourao: {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL_CAMPOMOURAO || "",
+    key: process.env.NEXT_PUBLIC_SUPABASE_KEY_CAMPOMOURAO || "",
+  },
+}
+
+// Função para validar credenciais
+function validateCredentials(credentials: StoreCredentials): boolean {
+  return Boolean(
+    credentials &&
+    credentials.url &&
+    credentials.url.startsWith('https://') &&
+    credentials.key &&
+    credentials.key.length > 20
+  )
+}
+
+// Função para obter as credenciais da loja
+function getStoreCredentials(store: string): StoreCredentials {
+  if (!store) {
+    console.error("⚠️ Nome da loja não fornecido")
+    throw new Error("Nome da loja não fornecido")
   }
 
-  // Se estiver no servidor, usa as credenciais padrão
-  if (typeof window === 'undefined') {
-    return defaultCredentials
-  }
+  console.log(`🔍 Obtendo credenciais para a loja: ${store}`)
+  const credentials = storeCredentials[store]
   
-  // Tenta obter a loja selecionada
-  const loja = localStorage.getItem("selectedLoja")
-  if (!loja) {
-    return defaultCredentials
+  if (!credentials) {
+    console.error(`⚠️ Loja "${store}" não encontrada no mapeamento de credenciais`)
+    throw new Error(`Loja "${store}" não encontrada`)
   }
 
-  // Tenta obter as credenciais da loja selecionada
-  const credentials = supabaseCredentials[loja as keyof typeof supabaseCredentials]
-  if (!credentials || !credentials.url || !credentials.anonKey) {
-    console.warn("Credenciais não encontradas ou incompletas para a loja:", loja)
-    return defaultCredentials
+  if (!validateCredentials(credentials)) {
+    console.error(`
+⚠️ Credenciais inválidas para a loja: ${store}
+URL: ${credentials.url ? "Presente" : "Ausente"}
+Key: ${credentials.key ? "Presente" : "Ausente"}
+
+Verifique se as variáveis de ambiente estão configuradas corretamente:
+NEXT_PUBLIC_SUPABASE_URL_${store.toUpperCase()}
+NEXT_PUBLIC_SUPABASE_KEY_${store.toUpperCase()}
+
+Certifique-se de que:
+1. O arquivo .env.local existe na raiz do projeto
+2. As variáveis estão definidas corretamente
+3. O servidor foi reiniciado após as alterações
+    `)
+    throw new Error(`Credenciais inválidas para a loja ${store}`)
   }
 
   return credentials
 }
 
-// Função para criar um novo cliente Supabase
-function createSupabaseClient() {
-  const credentials = getSupabaseCredentials()
-  
-  if (!credentials.url || !credentials.anonKey) {
-    console.error("Credenciais do Supabase não encontradas")
-    throw new Error("Credenciais do Supabase não encontradas")
+// Função para obter as credenciais atuais
+function getCurrentCredentials(): StoreCredentials {
+  if (!isBrowser) {
+    return getStoreCredentials('toledo01') // Padrão para ambiente servidor
   }
 
-  console.log("Criando cliente Supabase para a loja:", localStorage?.getItem("selectedLoja"))
-  console.log("URL:", credentials.url)
-  
-  return createClient(credentials.url, credentials.anonKey, {
-    auth: {
-      persistSession: true,
-      storageKey: `sb-${localStorage?.getItem("selectedLoja") || 'default'}`
+  const selectedStore = localStorage.getItem("selectedStore")
+  if (!selectedStore) {
+    return getStoreCredentials('toledo01') // Padrão quando nenhuma loja selecionada
+  }
+
+  return getStoreCredentials(selectedStore)
+}
+
+// Armazena os clientes por loja
+const clientsMap = new Map<string, SupabaseClient>()
+
+// Função para criar um novo cliente Supabase
+export function createSupabaseClient(store?: string): SupabaseClient {
+  try {
+    const credentials = store ? getStoreCredentials(store) : getCurrentCredentials()
+    console.log(`🔄 Criando cliente Supabase para a loja: ${store || 'atual'}`)
+
+    // Cria um novo cliente com as credenciais específicas da loja
+    const client = createClient(credentials.url, credentials.key, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+    })
+
+    // Armazena o cliente no map
+    if (store) {
+      clientsMap.set(store, client)
+      console.log(`✅ Cliente Supabase armazenado para loja: ${store}`)
     }
-  })
+
+    return client
+  } catch (error) {
+    console.error('❌ Erro ao criar cliente Supabase:', error)
+    throw error // Propaga o erro para tratamento adequado na camada superior
+  }
 }
 
-// Função para obter o cliente Supabase atual
-export function getSupabaseClient() {
-  return createSupabaseClient()
+// Função para atualizar as credenciais do Supabase
+export function updateSupabaseCredentials(store: string): SupabaseClient {
+  if (!store) {
+    throw new Error('Nome da loja não fornecido')
+  }
+
+  console.log(`🔄 Atualizando credenciais para a loja: ${store}`)
+
+  // Remove o cliente anterior se existir
+  if (clientsMap.has(store)) {
+    console.log(`🗑️ Removendo cliente anterior da loja: ${store}`)
+    clientsMap.delete(store)
+  }
+
+  // Cria um novo cliente com as credenciais da loja
+  const client = createSupabaseClient(store)
+
+  // Atualiza o localStorage apenas se estivermos no browser
+  if (isBrowser) {
+    localStorage.setItem("selectedStore", store)
+    console.log(`✅ Loja ${store} salva no localStorage`)
+  }
+
+  return client
 }
 
-// Exportar uma função que retorna um novo cliente Supabase
-export const supabase = createSupabaseClient()
+// Função para obter o cliente atual
+export function getSupabaseClient(): SupabaseClient {
+  if (!isBrowser) {
+    console.log('⚠️ Criando cliente padrão para ambiente servidor')
+    return createSupabaseClient()
+  }
+
+  const selectedStore = localStorage.getItem("selectedStore")
+  if (!selectedStore) {
+    console.log('⚠️ Nenhuma loja selecionada, criando cliente padrão')
+    return createSupabaseClient()
+  }
+
+  // Verifica se já existe um cliente para esta loja
+  const existingClient = clientsMap.get(selectedStore)
+  if (existingClient) {
+    console.log(`✅ Usando cliente existente para loja: ${selectedStore}`)
+    return existingClient
+  }
+
+  // Cria um novo cliente se não existir
+  console.log(`🔄 Criando novo cliente para loja: ${selectedStore}`)
+  return createSupabaseClient(selectedStore)
+}
+
+// Exporta o cliente padrão
+export const supabase = getSupabaseClient()
+
+export default supabase
 
 export type Pedido = {
   id: number
@@ -100,22 +240,58 @@ export type Conferido = {
 }
 
 export async function getPedidos() {
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
+  console.log(`📦 Buscando pedidos da loja: ${selectedStore}`)
   const supabase = getSupabaseClient()
-  const { data: documents, error: documentsError } = await supabase.from("documents").select("id, content")
 
-  if (documentsError) throw documentsError
+  const { data: documentsRaw, error: documentsError } = await supabase
+    .from("documents")
+    .select("id, content")
 
-  const { data: conferidos, error: conferidosError } = await supabase
+  if (documentsError) {
+    console.error(`❌ Erro ao buscar documentos da loja ${selectedStore}:`, documentsError)
+    throw documentsError
+  }
+
+  const documents = (documentsRaw as any[])?.map(doc => ({
+    id: Number(doc.id),
+    content: String(doc.content)
+  }))
+
+  const { data: conferidosRaw, error: conferidosError } = await supabase
     .from("conferidos")
     .select("pedido_id, quantidade_recebida, total_conferida")
 
-  if (conferidosError) throw conferidosError
+  if (conferidosError) {
+    console.error(`❌ Erro ao buscar conferidos da loja ${selectedStore}:`, conferidosError)
+    throw conferidosError
+  }
 
-  const { data: pendencias, error: pendenciasError } = await supabase
+  const conferidos = (conferidosRaw as any[])?.map(c => ({
+    pedido_id: Number(c.pedido_id),
+    quantidade_recebida: Number(c.quantidade_recebida),
+    total_conferida: Number(c.total_conferida)
+  }))
+
+  const { data: pendenciasRaw, error: pendenciasError } = await supabase
     .from("pendencias")
     .select("pedido_id, quantidade_pedida, quantidade_recebida, total_pendentes")
 
-  if (pendenciasError) throw pendenciasError
+  if (pendenciasError) {
+    console.error(`❌ Erro ao buscar pendências da loja ${selectedStore}:`, pendenciasError)
+    throw pendenciasError
+  }
+
+  const pendencias = (pendenciasRaw as any[])?.map(p => ({
+    pedido_id: String(p.pedido_id),
+    quantidade_pedida: Number(p.quantidade_pedida),
+    quantidade_recebida: Number(p.quantidade_recebida),
+    total_pendentes: p.total_pendentes ? Number(p.total_pendentes) : undefined
+  }))
 
   // Cria conjuntos para busca rápida
   const pedidosConferidos = new Map()
@@ -123,7 +299,7 @@ export async function getPedidos() {
   const pedidosTotalItens = new Map()
 
   // Calcula o total de itens para cada pedido
-  documents?.forEach((doc) => {
+  documents?.forEach((doc: Document) => {
     const linhas = doc.content.split("\n")
     let totalItens = 0
 
@@ -143,7 +319,7 @@ export async function getPedidos() {
   })
 
   // Agrupa os itens conferidos por pedido e calcula pendências
-  conferidos?.forEach((c) => {
+  conferidos?.forEach((c: ConferidoRecord) => {
     const pedidoId = c.pedido_id
     if (pedidosConferidos.has(pedidoId)) {
       const atual = pedidosConferidos.get(pedidoId)
@@ -169,9 +345,9 @@ export async function getPedidos() {
   })
 
   // Adiciona pendências da tabela de pendências
-  pendencias?.forEach((p) => {
+  pendencias?.forEach((p: PendenciaRecord) => {
     const quantidadeFaltante = p.quantidade_pedida - p.quantidade_recebida
-    const pedidoId = p.pedido_id
+    const pedidoId = Number(p.pedido_id)
 
     if (quantidadeFaltante > 0) {
       if (pedidosPendentes.has(pedidoId)) {
@@ -196,10 +372,10 @@ export async function getPedidos() {
   const pendentesList: Pedido[] = []
   const arquivadosList: Pedido[] = []
 
-  documents?.forEach((p) => {
+  documents?.forEach((p: Document) => {
     const linha = p.content.split("\n")[0]
     const pedidoNum = linha.split(",")[1]?.replaceAll('"', "").trim() || "Desconhecido"
-    const pedido = { id: p.id, numero: pedidoNum }
+    const pedido: Pedido = { id: p.id, numero: pedidoNum }
 
     if (pedidosArquivadosSet.has(p.id)) {
       const arquivado = pedidosArquivados.find((a) => a.id === p.id)
@@ -282,15 +458,24 @@ export function desarquivarPedido(pedidoId: number) {
 }
 
 export async function getPedidoById(pedidoId: string | number) {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
-    const { data, error } = await supabase.from("documents").select("content").eq("id", pedidoId).single()
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from("documents")
+      .select("content")
+      .eq("id", pedidoId)
+      .single()
 
     if (error) {
-      console.error(`❌ Erro ao buscar pedido ${pedidoId}:`, error)
+      console.error(`❌ Erro ao buscar pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-    return data
+  return data
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pedido ${pedidoId}:`, error)
     throw error
@@ -298,20 +483,25 @@ export async function getPedidoById(pedidoId: string | number) {
 }
 
 export async function getConferenciaById(pedidoId: string | number) {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
-    const { data, error } = await supabase
-      .from("conferidos")
-      .select("*")
-      .eq("pedido_id", pedidoId)
-      .order("data", { ascending: false })
-      .limit(1)
+    const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("conferidos")
+    .select("*")
+    .eq("pedido_id", pedidoId)
+    .order("data", { ascending: false })
+    .limit(1)
 
     if (error) {
-      console.error(`❌ Erro ao buscar conferência do pedido ${pedidoId}:`, error)
+      console.error(`❌ Erro ao buscar conferência do pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-    return data?.[0]
+  return data?.[0]
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar conferência do pedido ${pedidoId}:`, error)
     throw error
@@ -319,18 +509,23 @@ export async function getConferenciaById(pedidoId: string | number) {
 }
 
 export async function getPendenciasByPedidoId(pedidoId: string | number) {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
+    const supabase = getSupabaseClient()
     const { data, error } = await supabase
-      .from('pendencias')
-      .select('*')
-      .eq('pedido_id', String(pedidoId))
+      .from("pendencias")
+      .select("*")
+      .eq("pedido_id", String(pedidoId))
 
     if (error) {
-      console.error(`❌ Erro ao buscar pendências do pedido ${pedidoId}:`, error)
+      console.error(`❌ Erro ao buscar pendências do pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-    return data || []
+  return data || []
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pendências do pedido ${pedidoId}:`, error)
     throw error
@@ -338,51 +533,70 @@ export async function getPendenciasByPedidoId(pedidoId: string | number) {
 }
 
 export async function getAllPendencias() {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
-    const { data, error } = await supabase.from("pendencias").select("*")
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from("pendencias")
+      .select("*")
 
     if (error) {
-      console.error("❌ Erro ao buscar todas as pendências:", error)
+      console.error(`❌ Erro ao buscar todas as pendências da loja ${selectedStore}:`, error)
       throw error
     }
-    return data || []
+  return data || []
   } catch (error) {
-    console.error("❌ Erro detalhado ao buscar todas as pendências:", error)
+    console.error(`❌ Erro detalhado ao buscar todas as pendências:`, error)
     throw error
   }
 }
 
-export async function salvarConferencia(dados: any) {
-  const supabase = getSupabaseClient()
+export async function salvarConferencia(dados: {
+  pedido_id: number
+  quantidade_recebida: number
+  total_conferida: number
+  produtos: string
+  responsavel: string
+  data: string
+}) {
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
-    const { data: existingData, error: checkError } = await supabase
-      .from("conferidos")
-      .select("id")
-      .eq("pedido_id", dados.pedido_id)
-      .order("data", { ascending: false })
-      .limit(1)
+    const supabase = getSupabaseClient()
+  const { data: existingData, error: checkError } = await supabase
+    .from("conferidos")
+    .select("id")
+    .eq("pedido_id", dados.pedido_id)
+    .order("data", { ascending: false })
+    .limit(1)
 
-    if (checkError) throw checkError
+  if (checkError) throw checkError
 
-    let result
-    if (existingData && existingData.length > 0) {
-      // Atualizar registro existente
+  let result
+  if (existingData && existingData.length > 0) {
+    // Atualizar registro existente
       result = await supabase
         .from("conferidos")
         .update(dados)
         .eq("id", existingData[0].id)
-    } else {
-      // Inserir novo registro
+  } else {
+    // Inserir novo registro
       result = await supabase
         .from("conferidos")
         .insert([dados])
-    }
+  }
 
     if (result.error) throw result.error
-    return result
+  return result
   } catch (error) {
-    console.error("Erro detalhado ao salvar conferência:", error)
+    console.error(`❌ Erro ao salvar conferência na loja ${selectedStore}:`, error)
     throw error
   }
 }
@@ -399,11 +613,17 @@ export async function salvarPendencias(dados: {
   }>,
   responsavel: string
 }) {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
     if (!dados.produtos || dados.produtos.length === 0) {
       return { data: null, error: null }
     }
+
+    const supabase = getSupabaseClient()
 
     // Primeiro, deletar pendências existentes
     await deletarPendencias(dados.pedidoId)
@@ -423,31 +643,36 @@ export async function salvarPendencias(dados: {
 
     // Inserir as novas pendências
     const { data, error } = await supabase
-      .from('pendencias')
+      .from("pendencias")
       .insert(pendencias)
 
     if (error) {
-      console.error("❌ Erro ao salvar pendências:", error)
+      console.error(`❌ Erro ao salvar pendências na loja ${selectedStore}:`, error)
       throw error
     }
 
-    return { data: pendencias, error: null }
+  return { data: pendencias, error: null }
   } catch (error) {
-    console.error("❌ Erro detalhado ao salvar pendências:", error)
+    console.error(`❌ Erro detalhado ao salvar pendências:`, error)
     throw error
   }
 }
 
 export async function deletarPendencias(pedidoId: string | number) {
-  const supabase = getSupabaseClient()
+  const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
+  if (!selectedStore) {
+    throw new Error("Nenhuma loja selecionada")
+  }
+
   try {
+    const supabase = getSupabaseClient()
     const { error } = await supabase
-      .from('pendencias')
+      .from("pendencias")
       .delete()
-      .eq('pedido_id', String(pedidoId))
+      .eq("pedido_id", String(pedidoId))
 
     if (error) {
-      console.error(`❌ Erro ao deletar pendências do pedido ${pedidoId}:`, error)
+      console.error(`❌ Erro ao deletar pendências do pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
     return { error: null }
@@ -455,4 +680,36 @@ export async function deletarPendencias(pedidoId: string | number) {
     console.error(`❌ Erro detalhado ao deletar pendências do pedido ${pedidoId}:`, error)
     throw error
   }
+}
+
+// Função para testar as credenciais de todas as lojas
+export function testStoreCredentials() {
+  const stores = ['toledo01', 'toledo02', 'videira', 'fraiburgo', 'campomourao']
+  
+  console.log('\n🔍 Testando credenciais de todas as lojas:')
+  console.log('----------------------------------------')
+  
+  stores.forEach(store => {
+    try {
+      const credentials = storeCredentials[store]
+      console.log(`\n📌 Loja: ${store}`)
+      console.log(`URL: ${credentials.url ? credentials.url.substring(0, 30) + '...' : 'não definida'}`)
+      console.log(`Key presente: ${Boolean(credentials.key)}`)
+      console.log(`URL válida: ${credentials.url.startsWith('https://')}`)
+      console.log(`Key válida: ${credentials.key.length > 20}`)
+      console.log(`Variáveis usadas:`)
+      console.log(`- NEXT_PUBLIC_SUPABASE_URL_${store.toUpperCase()}`)
+      console.log(`- NEXT_PUBLIC_SUPABASE_KEY_${store.toUpperCase()}`)
+    } catch (error) {
+      console.error(`❌ Erro ao testar credenciais da loja ${store}:`, error)
+    }
+  })
+  
+  console.log('\n----------------------------------------')
+}
+
+// Executa o teste se estiver em desenvolvimento
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔧 Ambiente de desenvolvimento detectado')
+  testStoreCredentials()
 }

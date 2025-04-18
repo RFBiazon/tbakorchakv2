@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/supabase"
+import { supabase, updateSupabaseCredentials } from "@/lib/supabase"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { 
   Home, 
@@ -46,18 +46,45 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   
   useEffect(() => {
-    const loja = localStorage.getItem("selectedLoja")
-    if (!loja) {
-      router.push("/")
-      return
-    }
-    setSelectedLoja(loja)
+    checkSession()
   }, [router])
 
+  const checkSession = async () => {
+    try {
+      // Verifica a loja selecionada
+      const loja = localStorage.getItem("selectedStore")
+      if (!loja) {
+        console.log("Nenhuma loja selecionada")
+        router.push("/")
+        return
+      }
+
+      // Atualiza o cliente Supabase com as credenciais da loja
+      const supabaseClient = updateSupabaseCredentials(loja)
+      
+      // Verifica a sessão
+      const { data: { session } } = await supabaseClient.auth.getSession()
+      if (!session) {
+        console.log("Sessão não encontrada")
+        router.push("/")
+        return
+      }
+
+      setSelectedLoja(loja)
+    } catch (error) {
+      console.error("Erro ao verificar sessão:", error)
+      router.push("/")
+    }
+  }
+
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    localStorage.removeItem("selectedLoja")
-    router.push("/")
+    try {
+      await supabase.auth.signOut()
+      localStorage.removeItem("selectedStore")
+      router.push("/")
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error)
+    }
   }
 
   const getLojaName = (id: string) => {
