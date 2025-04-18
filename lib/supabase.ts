@@ -3,28 +3,28 @@ import { supabaseCredentials } from "./supabase-credentials"
 
 // Função para obter as credenciais da loja atual
 function getSupabaseCredentials() {
-  if (typeof window === 'undefined') {
-    return {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
-      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
-    }
-  }
-  
-  const loja = localStorage.getItem("selectedLoja")
-  if (!loja) {
-    return {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
-      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
-    }
+  // Credenciais padrão (Toledo 02)
+  const defaultCredentials = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL_TOLEDO02 || "",
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02 || ""
   }
 
+  // Se estiver no servidor, usa as credenciais padrão
+  if (typeof window === 'undefined') {
+    return defaultCredentials
+  }
+  
+  // Tenta obter a loja selecionada
+  const loja = localStorage.getItem("selectedLoja")
+  if (!loja) {
+    return defaultCredentials
+  }
+
+  // Tenta obter as credenciais da loja selecionada
   const credentials = supabaseCredentials[loja as keyof typeof supabaseCredentials]
-  if (!credentials) {
-    console.warn("Credenciais não encontradas para a loja:", loja)
-    return {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://xgmotjezsdwqwrtwztlj.supabase.co",
-      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnbW90amV6c2R3cXdydHd6dGxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3Njg2ODYsImV4cCI6MjA2MDM0NDY4Nn0.GpfDr6v7P8GG06XxvFLML4fDbQBuU7u-F210_x4kInw"
-    }
+  if (!credentials || !credentials.url || !credentials.anonKey) {
+    console.warn("Credenciais não encontradas ou incompletas para a loja:", loja)
+    return defaultCredentials
   }
 
   return credentials
@@ -33,6 +33,12 @@ function getSupabaseCredentials() {
 // Função para criar um novo cliente Supabase
 function createSupabaseClient() {
   const credentials = getSupabaseCredentials()
+  
+  if (!credentials.url || !credentials.anonKey) {
+    console.error("Credenciais do Supabase não encontradas")
+    throw new Error("Credenciais do Supabase não encontradas")
+  }
+
   console.log("Criando cliente Supabase para a loja:", localStorage?.getItem("selectedLoja"))
   console.log("URL:", credentials.url)
   
