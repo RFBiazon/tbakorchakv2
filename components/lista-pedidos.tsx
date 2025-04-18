@@ -88,7 +88,7 @@ export function ListaPedidos() {
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
-        <h1 className="text-xl md:text-2xl font-bold text-black dark:text-white">📦 Lista de Pedidos - {getLojaName(selectedLoja)}</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-black dark:text-white">📦 Lista de Pedidos</h1>
         <Link href="/relatorios" className="text-foreground hover:text-primary text-xl md:text-2xl" title="Ir para relatórios">
           <BarChart2 />
         </Link>
