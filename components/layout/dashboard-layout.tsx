@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { supabase, updateSupabaseCredentials } from "@/lib/supabase"
+import { supabase, updateSupabaseCredentials, getPedidos } from "@/lib/supabase"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { 
   Home, 
@@ -39,12 +39,60 @@ const menuItems = [
   }
 ]
 
+interface DashboardStats {
+  totalPedidos: number;
+  pedidosParaConferir: number;
+  pedidosPendentes: number;
+  itensPendentes: number;
+}
+
+export function useStoreStats() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        const { aConferir, pendentes } = await getPedidos();
+        
+        // Calcula o total de itens pendentes
+        const totalItensPendentes = pendentes.reduce((total, pedido) => {
+          return total + (pedido.quantidade_faltante || 0);
+        }, 0);
+
+        setStats({
+          pedidosParaConferir: aConferir.length,
+          pedidosPendentes: pendentes.length,
+          itensPendentes: totalItensPendentes,
+          totalPedidos: aConferir.length + pendentes.length
+        });
+        setError(null);
+      } catch (error) {
+        console.error('Erro ao carregar estatísticas:', error);
+        setError('Erro ao carregar estatísticas');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+    const interval = setInterval(loadStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { stats, loading, error };
+}
+
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [selectedLoja, setSelectedLoja] = useState("")
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   
+  const { stats, loading } = useStoreStats()
+
   useEffect(() => {
     checkSession()
   }, [router])
@@ -102,17 +150,17 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* Barra superior */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-[hsl(var(--header-background))]">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
+        <div className="flex justify-between h-16 px-4">
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-[hsl(var(--header-foreground))] ml-2"
+              className="md:hidden text-[hsl(var(--header-foreground))]"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
               {isMenuOpen ? <X /> : <Menu />}
             </Button>
-            <div className="hidden md:block w-64 pl-2">
+            <div className="hidden md:block w-64">
               <Image
                 src="/NeoSystemsAI.png"
                 alt="NeoSystems Logo"
@@ -122,18 +170,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 priority
               />
             </div>
-            <div className="px-4">
-              <h1 className="text-xl font-semibold text-[hsl(var(--header-foreground))] truncate">
+            <div className="max-w-[200px] md:max-w-none">
+              <h1 className="text-sm md:text-xl font-semibold text-[hsl(var(--header-foreground))] truncate">
                 Controle de Loja - {getLojaName(selectedLoja)}
               </h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 mr-4">
+          <div className="flex items-center gap-2">
             <ThemeToggle />
             <Button 
               variant="outline"
               onClick={handleLogout}
-              className="text-foreground hover:text-foreground/80"
+              className="text-foreground hover:text-foreground/80 text-sm md:text-base"
             >
               Sair
             </Button>

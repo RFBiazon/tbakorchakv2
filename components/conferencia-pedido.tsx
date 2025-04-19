@@ -325,9 +325,9 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
     const totalRecebido = produtos.reduce((acc, p) => acc + p.recebido, 0)
     const itensFaltantes = totalItens - totalRecebido
 
-    if (totalRecebido === 0) return `📦 Total: ${totalItens} itens`
-    if (itensFaltantes === 0) return "✅ Tudo Recebido"
-    return `⚠️ ${itensFaltantes} ${itensFaltantes === 1 ? 'Item Pendente' : 'Itens Pendentes'}`
+    if (totalRecebido === 0) return <span className="text-black dark:text-white">📦 Total: {totalItens} itens</span>
+    if (itensFaltantes === 0) return <span className="text-black dark:text-white">✅ Tudo Recebido</span>
+    return <span className="text-[#EAB308] dark:text-yellow-500">⚠️ {itensFaltantes} {itensFaltantes === 1 ? 'Item Pendente' : 'Itens Pendentes'}</span>
   }
 
   if (loading) {

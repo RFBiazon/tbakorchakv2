@@ -201,7 +201,7 @@ export function ListaPedidos() {
                       <div className="flex items-center gap-4">
                         <Link
                           href={`/visualizar/${pedido.id}?numero=${pedido.numero}&modo=pendente`}
-                          className="text-yellow-500"
+                          className="text-black dark:text-yellow-500"
                         >
                           ⚠️ {pedido.quantidade_faltante} {pedido.quantidade_faltante === 1 ? 'Item Pendente' : 'Itens Pendentes'}
                         </Link>
