@@ -16,6 +16,18 @@ export async function POST(request: Request) {
       throw new Error('Webhook URL não configurada')
     }
 
+    // Verificar se o arquivo está presente
+    const file = formData.get('data')
+    if (!file || !(file instanceof File)) {
+      throw new Error('Arquivo não encontrado no FormData')
+    }
+
+    // Verificar se o storeId está presente
+    const storeId = formData.get('storeId')
+    if (!storeId) {
+      throw new Error('storeId não encontrado no FormData')
+    }
+
     const response = await fetch(webhookUrl, {
       method: "POST",
       body: formData,
@@ -24,20 +36,18 @@ export async function POST(request: Request) {
       }
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Webhook error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
-      })
-      throw new Error(`Erro no webhook: ${response.status} ${response.statusText}`)
-    }
+    const responseText = await response.text()
+    console.log('Webhook response:', {
+      status: response.status,
+      statusText: response.statusText,
+      body: responseText
+    })
 
-    const data = await response.text()
-    console.log('Webhook success response:', data)
+    if (!response.ok) {
+      throw new Error(`Erro no webhook: ${response.status} ${response.statusText} - ${responseText}`)
+    }
     
-    return new NextResponse(data, {
+    return new NextResponse(responseText, {
       status: response.status,
       headers: {
         'Content-Type': 'application/json',
