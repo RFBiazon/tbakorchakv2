@@ -35,34 +35,52 @@ export async function POST(request: Request) {
       size: file.size
     })
 
-    // Iniciar o envio do arquivo para n8n sem aguardar a resposta
-    fetch(webhookUrl, {
-      method: "POST",
-      body: newFormData,
-    }).then(async (response) => {
+    // Configurar o timeout para 5 minutos
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        body: newFormData,
+        signal: controller.signal,
+        headers: {
+          'Connection': 'keep-alive',
+          'Keep-Alive': 'timeout=300'
+        }
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`Erro no webhook: ${response.status} ${response.statusText}`)
+      }
+
       const responseText = await response.text()
       console.log('Webhook response:', {
         status: response.status,
         statusText: response.statusText,
         body: responseText
       })
-    }).catch((error) => {
-      console.error('Error in webhook processing:', error)
-    })
-    
-    // Retornar sucesso imediatamente
-    return new NextResponse(JSON.stringify({ 
-      status: 'sucesso',
-      message: 'Imagem recebida com sucesso. O processamento foi iniciado e pode levar alguns instantes para ser concluído.'
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-      },
-    })
+
+      return new NextResponse(JSON.stringify({ 
+        status: 'sucesso',
+        message: 'Imagem processada com sucesso'
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+          'Connection': 'keep-alive',
+          'Keep-Alive': 'timeout=300'
+        },
+      })
+    } catch (error) {
+      clearTimeout(timeoutId)
+      throw error
+    }
   } catch (error) {
     console.error('Erro no webhook:', error)
     return new NextResponse(JSON.stringify({ 
@@ -75,6 +93,8 @@ export async function POST(request: Request) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+        'Connection': 'keep-alive',
+        'Keep-Alive': 'timeout=300'
       },
     })
   }
@@ -87,6 +107,8 @@ export async function OPTIONS() {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+      'Connection': 'keep-alive',
+      'Keep-Alive': 'timeout=300'
     },
   })
 } 
