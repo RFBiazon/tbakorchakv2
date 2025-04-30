@@ -2,8 +2,13 @@
 
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Camera, Upload, X, ZoomIn, ZoomOut } from "lucide-react"
+import { Camera, Upload, X, ZoomIn, ZoomOut, Save, Edit, Check, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { supabase } from "@/lib/supabase"
+import { HistoricoCompras } from "./historico-compras"
+import { toast } from "sonner"
 
 interface ProdutoCompra {
   Fruta: string
@@ -21,6 +26,8 @@ interface FileQueueItem {
   error?: string
   response?: WebhookResponse | string
   uploadTimestamp: string
+  savedCompraId?: number
+  isEditing?: boolean
 }
 
 interface WebhookEntry {
@@ -71,12 +78,25 @@ const parseProdutos = (data: string | ProdutoCompra[]): ProdutoCompra[] => {
 const ProdutosTable = ({ 
   produtos, 
   uploadTimestamp,
-  onProdutoChange
+  onProdutoChange,
+  onSave,
+  isEditing,
+  onEdit,
+  savedCompraId
 }: { 
   produtos: EditableProduto[], 
   uploadTimestamp: string,
-  onProdutoChange: (index: number, field: keyof EditableProduto, value: string) => void
+  onProdutoChange: (index: number, field: keyof EditableProduto, value: string) => void,
+  onSave?: () => void,
+  isEditing?: boolean,
+  onEdit?: () => void,
+  savedCompraId?: number
 }) => {
+  const total = produtos.reduce((acc, produto) => {
+    const valor = produto["Valor Total"] ? parseFloat(produto["Valor Total"]) : 0
+    return acc + valor
+  }, 0)
+
   return (
     <div className="mt-4 bg-card rounded-lg border shadow-sm">
       <div className="overflow-x-auto">
@@ -99,6 +119,7 @@ const ProdutosTable = ({
                     value={produto.Fruta}
                     onChange={(e) => onProdutoChange(index, 'Fruta', e.target.value)}
                     className="h-8"
+                    disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
@@ -106,6 +127,7 @@ const ProdutosTable = ({
                     value={produto.Quantidade || ''}
                     onChange={(e) => onProdutoChange(index, 'Quantidade', e.target.value)}
                     className="h-8"
+                    disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
@@ -113,6 +135,7 @@ const ProdutosTable = ({
                     value={produto["Valor Unitário / KG"] || ''}
                     onChange={(e) => onProdutoChange(index, "Valor Unitário / KG", e.target.value)}
                     className="h-8"
+                    disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
@@ -120,6 +143,7 @@ const ProdutosTable = ({
                     value={produto["Valor Total"] || ''}
                     onChange={(e) => onProdutoChange(index, "Valor Total", e.target.value)}
                     className="h-8"
+                    disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
@@ -127,6 +151,7 @@ const ProdutosTable = ({
                     value={produto.Fornecedor}
                     onChange={(e) => onProdutoChange(index, 'Fornecedor', e.target.value)}
                     className="h-8"
+                    disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">{formatDate(uploadTimestamp)}</td>
@@ -137,18 +162,37 @@ const ProdutosTable = ({
             <tr className="font-medium">
               <td className="p-3" colSpan={3}>Total</td>
               <td className="p-3">
-                {formatCurrency(
-                  produtos
-                    .reduce((acc, produto) => {
-                      const valor = produto["Valor Total"] ? 
-                        parseFloat(produto["Valor Total"]) : 
-                        0
-                      return acc + valor
-                    }, 0)
-                    .toString()
+                {formatCurrency(total.toString())}
+              </td>
+              <td className="p-3" colSpan={2}>
+                {savedCompraId === undefined ? (
+                  onSave && (
+                    <Button 
+                      onClick={onSave}
+                      className="w-full bg-green-500 hover:bg-green-600"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Salvar no Histórico
+                    </Button>
+                  )
+                ) : isEditing ? (
+                  <Button 
+                    onClick={onSave}
+                    className="w-full bg-green-500 hover:bg-green-600"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Salvar Alterações
+                  </Button>
+                ) : onEdit && (
+                  <Button 
+                    onClick={onEdit}
+                    className="w-full bg-orange-500 hover:bg-orange-600"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
                 )}
               </td>
-              <td colSpan={2}></td>
             </tr>
           </tfoot>
         </table>
@@ -376,14 +420,13 @@ export function CentralCompras() {
         formData.append("storeId", storeId)
         formData.append("uploadTimestamp", fileQueue[i].uploadTimestamp)
 
-        const response = await fetch("/api/webhook", {
+        const response = await fetch(process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT!, {
           method: "POST",
           body: formData,
         })
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => null)
-          throw new Error(errorData?.message || "Erro ao enviar arquivo")
+          throw new Error("Erro ao enviar arquivo")
         }
 
         const responseText = await response.text()
@@ -457,176 +500,368 @@ export function CentralCompras() {
     setIsProcessing(false)
   }
 
+  const handleSaveToSupabase = async (index: number) => {
+    const item = fileQueue[index]
+    if (!item.response || typeof item.response === 'string') return
+
+    if (isWebhookResponse(item.response)) {
+      const entry = item.response.entries[0]
+      if (entry.data && Array.isArray(entry.data)) {
+        const produtos = parseProdutos(entry.data)
+        
+        try {
+          if (item.savedCompraId) {
+            // Se já existe um ID, atualizar o registro existente
+            const valorTotal = produtos.reduce((acc, produto) => {
+              return acc + parseFloat(produto["Valor Total"] || "0")
+            }, 0)
+
+            // Atualizar a compra principal
+            const { error: compraError } = await supabase
+              .from('compras')
+              .update({
+                fornecedor: produtos[0].Fornecedor,
+                valor_total: valorTotal
+              })
+              .eq('id', item.savedCompraId)
+
+            if (compraError) throw compraError
+
+            // Deletar itens antigos
+            const { error: deleteError } = await supabase
+              .from('itens_compra')
+              .delete()
+              .eq('compra_id', item.savedCompraId)
+
+            if (deleteError) throw deleteError
+
+            // Inserir novos itens
+            const itensPromises = produtos.map(produto => {
+              return supabase.from('itens_compra').insert({
+                compra_id: item.savedCompraId,
+                produto: produto.Fruta,
+                quantidade: parseFloat(produto.Quantidade),
+                valor_unitario: parseFloat(produto["Valor Unitário / KG"]),
+                valor_total: parseFloat(produto["Valor Total"]),
+                fornecedor: produto.Fornecedor,
+                data_compra: item.uploadTimestamp,
+                tipo_compra: 'fruta'
+              })
+            })
+
+            await Promise.all(itensPromises)
+            toast.success('Compra atualizada com sucesso!')
+          } else {
+            // Criar novo registro
+            const valorTotal = produtos.reduce((acc, produto) => {
+              return acc + parseFloat(produto["Valor Total"] || "0")
+            }, 0)
+
+            const { data: compraData, error: compraError } = await supabase
+              .from('compras')
+              .insert({
+                fornecedor: produtos[0].Fornecedor || "Sem Fornecedor Cadastrado",
+                data_compra: item.uploadTimestamp,
+                valor_total: valorTotal,
+                tipo_compra: 'fruta'
+              })
+              .select()
+              .single()
+
+            if (compraError) throw compraError
+
+            const itensPromises = produtos.map(produto => {
+              return supabase.from('itens_compra').insert({
+                compra_id: compraData.id,
+                produto: produto.Fruta,
+                quantidade: parseFloat(produto.Quantidade),
+                valor_unitario: parseFloat(produto["Valor Unitário / KG"]),
+                valor_total: parseFloat(produto["Valor Total"]),
+                fornecedor: produto.Fornecedor,
+                data_compra: item.uploadTimestamp,
+                tipo_compra: 'fruta'
+              })
+            })
+
+            await Promise.all(itensPromises)
+
+            // Atualizar o estado com o ID da compra salva
+            setFileQueue(prev => {
+              const newQueue = [...prev]
+              newQueue[index] = {
+                ...newQueue[index],
+                savedCompraId: compraData.id,
+                isEditing: false
+              }
+              return newQueue
+            })
+
+            toast.success('Compra salva com sucesso!')
+          }
+        } catch (error) {
+          console.error('Erro ao salvar:', error)
+          toast.error('Erro ao salvar a compra')
+        }
+      }
+    }
+  }
+
+  const handleEdit = (index: number) => {
+    setFileQueue(prev => {
+      const newQueue = [...prev]
+      newQueue[index] = {
+        ...newQueue[index],
+        isEditing: true
+      }
+      return newQueue
+    })
+  }
+
+  const handleClearQueue = () => {
+    // Limpar as URLs dos previews antes de limpar a fila
+    fileQueue.forEach(item => {
+      URL.revokeObjectURL(item.preview)
+    })
+    setFileQueue([])
+    setError(null)
+    setStatus(null)
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Central de Compras</h1>
       
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex gap-4">
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1"
-              disabled={isUploading || isProcessing}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Selecionar Arquivos
-            </Button>
-            <Button
-              onClick={handleCameraCapture}
-              className="flex-1"
-              disabled={isUploading || isProcessing || showCamera}
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              Usar Câmera
-            </Button>
-          </div>
+      <Tabs defaultValue="frutas" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="frutas">Compra de Frutas</TabsTrigger>
+          <TabsTrigger value="outros">Outros Itens</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+        </TabsList>
 
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            accept=".jpg,.jpeg"
-            multiple
-            className="hidden"
-          />
-
-          {showCamera && (
-            <div className="relative rounded-lg overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full"
-              />
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                <Button onClick={captureImage} variant="secondary">
-                  Capturar
-                </Button>
-                <Button onClick={stopCamera} variant="destructive">
-                  <X className="mr-2 h-4 w-4" />
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="grid gap-6">
-            {fileQueue.map((item, index) => (
-              <div key={index} className="relative">
-                <div className="relative rounded-lg overflow-hidden border">
-                  <div className="relative h-[400px] overflow-auto">
-                    <img
-                      src={item.preview}
-                      alt={`Preview ${index + 1}`}
-                      style={{
-                        transform: `scale(${imageZooms[index] || 1})`,
-                        transformOrigin: 'center',
-                        transition: 'transform 0.2s ease-in-out'
-                      }}
-                      className="w-full object-contain"
-                    />
-                  </div>
-                  <div className="absolute top-2 right-2 flex gap-2">
-                    {item.status === 'completed' && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleZoom(index, false)}
-                          disabled={(imageZooms[index] || 1) <= 0.5}
-                          className="bg-background/80 backdrop-blur-sm"
-                        >
-                          <ZoomOut className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleZoom(index, true)}
-                          disabled={(imageZooms[index] || 1) >= 3}
-                          className="bg-background/80 backdrop-blur-sm"
-                        >
-                          <ZoomIn className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                    <Button
-                      onClick={() => removeFile(index)}
-                      variant="destructive"
-                      size="icon"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+        <TabsContent value="frutas">
+          <Card>
+            <CardHeader>
+              <CardTitle>Cadastro de Compra de Frutas</CardTitle>
+              <CardDescription>
+                Faça upload de notas fiscais ou tire fotos para registrar compras de frutas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-4">
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1"
+                    disabled={isUploading || isProcessing}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Selecionar Arquivos
+                  </Button>
+                  <Button
+                    onClick={handleCameraCapture}
+                    className="flex-1"
+                    disabled={isUploading || isProcessing || showCamera}
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    Usar Câmera
+                  </Button>
                 </div>
 
-                {item.status === 'uploading' && (
-                  <div className="mt-2 text-blue-500">Enviando...</div>
-                )}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept=".jpg,.jpeg"
+                  multiple
+                  className="hidden"
+                />
 
-                {item.status === 'error' && (
-                  <div className="mt-2 p-3 bg-destructive/10 text-destructive rounded-lg">
-                    {item.error}
+                {showCamera && (
+                  <div className="relative rounded-lg overflow-hidden">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full"
+                    />
+                    <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                      <Button onClick={captureImage} variant="secondary">
+                        Capturar
+                      </Button>
+                      <Button onClick={stopCamera} variant="destructive">
+                        <X className="mr-2 h-4 w-4" />
+                        Cancelar
+                      </Button>
+                    </div>
                   </div>
                 )}
 
-                {item.status === 'completed' && item.response && (
-                  <div className="mt-2">
-                    {typeof item.response === 'string' ? (
-                      <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
-                        {item.response}
+                <div className="grid gap-6">
+                  {fileQueue.map((item, index) => (
+                    <div key={index} className="relative">
+                      <div className="relative rounded-lg overflow-hidden border">
+                        <div className="relative h-[400px] overflow-auto">
+                          <img
+                            src={item.preview}
+                            alt={`Preview ${index + 1}`}
+                            style={{
+                              transform: `scale(${imageZooms[index] || 1})`,
+                              transformOrigin: 'center',
+                              transition: 'transform 0.2s ease-in-out'
+                            }}
+                            className="w-full object-contain"
+                          />
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-2">
+                          {item.status === 'completed' && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => handleZoom(index, false)}
+                                disabled={(imageZooms[index] || 1) <= 0.5}
+                                className="bg-background/80 backdrop-blur-sm"
+                              >
+                                <ZoomOut className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => handleZoom(index, true)}
+                                disabled={(imageZooms[index] || 1) >= 3}
+                                className="bg-background/80 backdrop-blur-sm"
+                              >
+                                <ZoomIn className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            onClick={() => removeFile(index)}
+                            variant="destructive"
+                            size="icon"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    ) : isWebhookResponse(item.response) ? (
-                      <div>
-                        {item.response.entries.map((entry: WebhookEntry, i: number) => (
-                          <div key={i}>
-                            <div className={`p-3 rounded-lg mb-2 ${
-                              entry.status === 'success' ? 'bg-green-500/10 text-green-500' : 
-                              entry.status === 'error' ? 'bg-destructive/10 text-destructive' : 
-                              'bg-blue-500/10 text-blue-500'
-                            }`}>
-                              {entry.message}
+
+                      {item.status === 'uploading' && (
+                        <div className="mt-2 text-blue-500">Enviando...</div>
+                      )}
+
+                      {item.status === 'error' && (
+                        <div className="mt-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                          {item.error}
+                        </div>
+                      )}
+
+                      {item.status === 'completed' && item.response && (
+                        <div className="mt-2">
+                          {typeof item.response === 'string' ? (
+                            <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
+                              {item.response}
                             </div>
-                            {entry.data && (
-                              <ProdutosTable 
-                                produtos={parseProdutos(entry.data) as EditableProduto[]}
-                                uploadTimestamp={item.uploadTimestamp}
-                                onProdutoChange={(produtoIndex, field, value) => 
-                                  handleProdutoChange(index, produtoIndex, field, value)
-                                }
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-3 bg-blue-500/10 text-blue-500 rounded-lg">
-                        Resposta recebida
-                      </div>
-                    )}
+                          ) : isWebhookResponse(item.response) ? (
+                            <div>
+                              {item.response.entries.map((entry: WebhookEntry, i: number) => (
+                                <div key={i}>
+                                  <div className={`p-3 rounded-lg mb-2 ${
+                                    entry.status === 'success' ? 'bg-green-500/10 text-green-500' : 
+                                    entry.status === 'error' ? 'bg-destructive/10 text-destructive' : 
+                                    'bg-blue-500/10 text-blue-500'
+                                  }`}>
+                                    {entry.message}
+                                  </div>
+                                  {entry.data && (
+                                    <ProdutosTable 
+                                      produtos={parseProdutos(entry.data) as EditableProduto[]}
+                                      uploadTimestamp={item.uploadTimestamp}
+                                      onProdutoChange={(produtoIndex, field, value) => 
+                                        handleProdutoChange(index, produtoIndex, field, value)
+                                      }
+                                      onSave={() => handleSaveToSupabase(index)}
+                                      isEditing={item.isEditing}
+                                      onEdit={() => handleEdit(index)}
+                                      savedCompraId={item.savedCompraId}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-lg">
+                              Resposta recebida
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                {fileQueue.length > 0 && (
+                  <div className="flex gap-4">
+                    <Button
+                      onClick={fileQueue.every(item => item.status === 'completed') ? handleClearQueue : processQueue}
+                      disabled={isUploading || isProcessing}
+                      className={fileQueue.every(item => item.status === 'completed') 
+                        ? "w-full bg-red-500 hover:bg-red-600"
+                        : "w-full"
+                      }
+                    >
+                      {fileQueue.every(item => item.status === 'completed') ? (
+                        <>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Limpar
+                        </>
+                      ) : (
+                        isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"
+                      )}
+                    </Button>
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          {error && (
-            <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
-              {error}
-            </div>
-          )}
+        <TabsContent value="outros">
+          <Card>
+            <CardHeader>
+              <CardTitle>Cadastro de Outros Itens</CardTitle>
+              <CardDescription>
+                Faça upload de notas fiscais ou tire fotos para registrar compras de outros itens
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Mesmo conteúdo do tab de frutas, mas com tipo_compra='outros' */}
+              <div className="text-center text-muted-foreground">
+                Em desenvolvimento. Por enquanto, use a mesma interface de frutas.
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          {fileQueue.length > 0 && (
-            <Button
-              onClick={processQueue}
-              disabled={isUploading || isProcessing}
-              className="w-full"
-            >
-              {isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"}
-            </Button>
-          )}
-        </div>
-      </div>
+        <TabsContent value="historico">
+          <Card>
+            <CardHeader>
+              <CardTitle>Histórico de Compras</CardTitle>
+              <CardDescription>
+                Visualize todas as compras registradas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HistoricoCompras />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {zoomImage && (
         <ImageZoomModal
