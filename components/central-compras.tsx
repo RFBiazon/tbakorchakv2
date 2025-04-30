@@ -376,13 +376,14 @@ export function CentralCompras() {
         formData.append("storeId", storeId)
         formData.append("uploadTimestamp", fileQueue[i].uploadTimestamp)
 
-        const response = await fetch(process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT || "", {
+        const response = await fetch("/api/webhook", {
           method: "POST",
           body: formData,
         })
 
         if (!response.ok) {
-          throw new Error("Erro ao enviar arquivo")
+          const errorData = await response.json().catch(() => null)
+          throw new Error(errorData?.message || "Erro ao enviar arquivo")
         }
 
         const responseText = await response.text()
