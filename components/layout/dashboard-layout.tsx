@@ -13,7 +13,8 @@ import {
   Box, 
   DollarSign,
   Menu,
-  X
+  X,
+  ShoppingCart
 } from "lucide-react"
 
 const menuItems = [
@@ -36,6 +37,11 @@ const menuItems = [
     name: "Controle Financeiro", 
     href: "/financeiro", 
     icon: DollarSign 
+  },
+  { 
+    name: "Central de Compras", 
+    href: "/compras", 
+    icon: ShoppingCart 
   }
 ]
 

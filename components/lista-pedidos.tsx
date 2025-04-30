@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { type Pedido, getPedidos, arquivarPedido, desarquivarPedido } from "@/lib/supabase"
+import { type Pedido, getPedidos, arquivarPedido, desarquivarPedido, getSupabaseClient, deletePedido } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Home, Download, Printer, BarChart2 } from "lucide-react"
+import { Search, Home, Download, Printer, BarChart2, Trash2 } from "lucide-react"
 
 const getLojaName = (id: string) => {
   const lojas = {
@@ -85,13 +85,47 @@ export function ListaPedidos() {
     }
   }
 
+  async function limparPedidos() {
+    const supabase = getSupabaseClient();
+    await supabase.from("historico_estoque").delete().neq("id", 0);
+    await supabase.from("pendencias").delete().neq("id", 0);
+    await supabase.from("conferidos").delete().neq("id", 0);
+  }
+
+  async function handleDelete(pedidoId: number) {
+    if (window.confirm("Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita!")) {
+      try {
+        await deletePedido(pedidoId)
+        await carregarPedidos()
+      } catch (error) {
+        console.error("Erro ao excluir pedido:", error)
+        alert("Erro ao excluir pedido. Por favor, tente novamente.")
+      }
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
         <h1 className="text-xl md:text-2xl font-bold text-black dark:text-white">📦 Lista de Pedidos</h1>
-        <Link href="/relatorios" className="text-foreground hover:text-primary text-xl md:text-2xl" title="Ir para relatórios">
-          <BarChart2 />
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/relatorios" className="text-foreground hover:text-primary text-xl md:text-2xl" title="Ir para relatórios">
+            <BarChart2 />
+          </Link>
+          <button
+            onClick={async () => {
+              if (window.confirm("Tem certeza que deseja excluir TODOS os pedidos e históricos? Esta ação não pode ser desfeita!")) {
+                await limparPedidos();
+                alert("Pedidos e históricos excluídos com sucesso!");
+                window.location.reload();
+              }
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-semibold"
+            title="Limpar todos os pedidos e históricos"
+          >
+            Limpar Pedidos
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4 w-full md:w-auto">
@@ -132,12 +166,23 @@ export function ListaPedidos() {
             {filtrarPedidos(pedidos.aConferir).length > 0 ? (
               filtrarPedidos(pedidos.aConferir).map((pedido) => (
                 <li key={pedido.id} className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(pedido.id)}
+                      className="text-red-500 hover:text-red-400"
+                      title="Excluir pedido"
+                    >
+                      <Trash2 size={18} />
+                    </Button>
                   <span className="text-card-foreground">
                     Pedido <strong>#{pedido.numero}</strong>
                   </span>
+                  </div>
                   <Link
                     href={`/pedidos/${pedido.id}?numero=${pedido.numero}`}
-                    className="text-[#6D28D9] font-bold hover:underline"
+                    className="text-blue-500 hover:text-blue-400"
                   >
                     Conferir
                   </Link>
@@ -156,9 +201,20 @@ export function ListaPedidos() {
               {filtrarPedidos(pedidos.conferidos).length > 0 ? (
                 filtrarPedidos(pedidos.conferidos).map((pedido) => (
                   <li key={pedido.id} className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(pedido.id)}
+                        className="text-red-500 hover:text-red-400"
+                        title="Excluir pedido"
+                      >
+                        <Trash2 size={18} />
+                      </Button>
                     <span className="text-card-foreground">
                       Pedido <strong>#{pedido.numero}</strong>
                     </span>
+                    </div>
                     <div className="flex items-center gap-4">
                       <Link
                         href={`/visualizar/${pedido.id}?numero=${pedido.numero}&modo=conferido`}
@@ -172,7 +228,7 @@ export function ListaPedidos() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleArquivar(pedido.id, pedido.numero)}
-                          className="text-muted-foreground hover:text-foreground"
+                          className="text-green-500 hover:text-green-400"
                           title="Arquivar"
                         >
                           📥
@@ -195,9 +251,20 @@ export function ListaPedidos() {
                   .filter(p => (p.quantidade_faltante ?? 0) > 0)
                   .map((pedido) => (
                     <li key={pedido.id} className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(pedido.id)}
+                          className="text-red-500 hover:text-red-400"
+                          title="Excluir pedido"
+                        >
+                          <Trash2 size={18} />
+                        </Button>
                       <span className="text-card-foreground">
                         Pedido <strong>#{pedido.numero}</strong>
                       </span>
+                      </div>
                       <div className="flex items-center gap-4">
                         <Link
                           href={`/visualizar/${pedido.id}?numero=${pedido.numero}&modo=pendente`}
@@ -219,29 +286,37 @@ export function ListaPedidos() {
                 filtrarPedidos(pedidos.arquivados).map((pedido) => (
                   <li
                     key={pedido.id}
-                    className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center opacity-70"
+                    className="bg-card border border-border px-4 py-3 rounded flex justify-between items-center"
                   >
-                    <span className="text-card-foreground">
-                      Pedido <strong>#{pedido.numero}</strong>
-                    </span>
-                    <div className="flex items-center gap-4">
-                      <Link
-                        href={`/visualizar/${pedido.id}?numero=${pedido.numero}&modo=conferido`}
-                        className="text-green-500"
-                      >
-                        ✅ Conferido
-                      </Link>
-                      <span className="text-xs text-muted-foreground">
-                        Arquivado em: {new Date(pedido.dataArquivamento || "").toLocaleDateString()}
-                      </span>
+                    <div className="flex items-center gap-2">
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDesarquivar(pedido.id)}
-                        className="text-blue-500 hover:text-blue-400"
-                        title="Desarquivar"
+                        onClick={() => handleDelete(pedido.id)}
+                        className="text-red-500 hover:text-red-400"
+                        title="Excluir pedido"
                       >
-                        📤
+                        <Trash2 size={18} />
+                      </Button>
+                    <span className="text-card-foreground">
+                      Pedido <strong>#{pedido.numero}</strong>
+                    </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Link
+                        href={`/pedidos/${pedido.id}?numero=${pedido.numero}`}
+                        className="text-blue-500 hover:text-blue-400"
+                      >
+                        Conferir
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleArquivar(pedido.id, pedido.numero)}
+                        className="text-green-500 hover:text-green-400"
+                        title="Arquivar"
+                      >
+                        📥
                       </Button>
                     </div>
                   </li>

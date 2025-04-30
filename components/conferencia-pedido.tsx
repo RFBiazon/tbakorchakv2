@@ -16,6 +16,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Home, Package, AlertTriangle, Lock, XCircle, HelpCircle } from "lucide-react"
+import { atualizarEstoqueConferencia } from "@/lib/atualizar-estoque"
+import { ProdutoNaoEncontradoDialog } from "@/components/produto-nao-encontrado-dialog"
+import { toast } from "react-hot-toast"
 
 type Produto = {
   nome: string
@@ -64,6 +67,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
   const [salvando, setSalvando] = useState(false)
   const [motivosPersonalizados, setMotivosPersonalizados] = useState<{ [key: string]: string }>({})
   const [redirecionar, setRedirecionar] = useState(false)
+  const [produtoNaoEncontrado, setProdutoNaoEncontrado] = useState<string | null>(null)
 
   useEffect(() => {
     carregarPedido()
@@ -186,7 +190,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
 
   async function enviarConferencia() {
     try {
-      setSalvando(true)
+      setLoading(true)
       const produtosArray: ProdutoConferido[] = []
       const pendencias: Pendencia[] = []
       let totalRecebido = 0
@@ -257,7 +261,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
       console.log("Salvando conferência...")
       // Salva a conferência
       const dadosConferencia = {
-        pedido_id: pedidoId,
+        pedido_id: Number(pedidoId),
         quantidade_recebida: totalRecebido,
         total_conferida: totalRecebido,
         produtos: JSON.stringify(produtosArray),
@@ -269,6 +273,10 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
       if (conferenciaResult.error) {
         throw new Error(`Erro ao salvar conferência: ${conferenciaResult.error}`)
       }
+
+      // Atualiza o estoque
+      console.log("Atualizando estoque...")
+      await atualizarEstoqueConferencia(dadosConferencia)
 
       // Atualiza a mensagem e inicia a transição
       setMensagem(pendencias.length > 0 
@@ -288,7 +296,7 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
       })
       setMensagem(`❌ ${error.message || 'Erro desconhecido ao processar a conferência'}. Por favor, tente novamente.`)
     } finally {
-      setSalvando(false)
+      setLoading(false)
     }
   }
 
@@ -503,6 +511,12 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProdutoNaoEncontradoDialog
+        open={!!produtoNaoEncontrado}
+        onOpenChange={() => setProdutoNaoEncontrado(null)}
+        produtoNome={produtoNaoEncontrado || ""}
+      />
     </>
   )
 }

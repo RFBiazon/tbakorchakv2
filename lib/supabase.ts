@@ -239,6 +239,20 @@ export type Conferido = {
   data: string
 }
 
+export type ProdutoEstoque = {
+  id: number
+  item: string
+  situacao: string
+  sugestao: string
+  peso: string
+  valor_total: string
+  valor_produto: string
+  valor_servico: string
+  estoque: number
+  disponivel_para_pedido: boolean
+  qtd: number
+}
+
 export async function getPedidos() {
   const selectedStore = isBrowser ? localStorage.getItem("selectedStore") : null
   if (!selectedStore) {
@@ -712,4 +726,184 @@ export function testStoreCredentials() {
 if (process.env.NODE_ENV === 'development') {
   console.log('🔧 Ambiente de desenvolvimento detectado')
   testStoreCredentials()
+}
+
+export async function getSorvetes() {
+  const { data, error } = await supabase
+    .from('sorvetes')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getAcai() {
+  const { data, error } = await supabase
+    .from('acai')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getAcompanhamentos() {
+  const { data, error } = await supabase
+    .from('acompanhamentos')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getCongelados() {
+  const { data, error } = await supabase
+    .from('congelados')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getUtensilhos() {
+  const { data, error } = await supabase
+    .from('utensilhos')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getColecionaveis() {
+  const { data, error } = await supabase
+    .from('colecionaveis')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getPotes() {
+  const { data, error } = await supabase
+    .from('potes')
+    .select('*')
+    .order('item')
+
+  if (error) throw error
+  return data as ProdutoEstoque[]
+}
+
+export async function getSazonais() {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from('sazonais')
+    .select('*')
+
+  if (error) {
+    console.error('Erro ao buscar produtos sazonais:', error)
+    throw new Error('Erro ao buscar produtos sazonais')
+  }
+
+  return data || []
+}
+
+export async function getCampanhas() {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from('campanhas')
+    .select('*')
+
+  if (error) {
+    console.error('Erro ao buscar produtos de campanhas:', error)
+    throw new Error('Erro ao buscar produtos de campanhas')
+  }
+
+  return data || []
+}
+
+export async function limparEstoque() {
+  const supabase = getSupabaseClient()
+  const tabelas = [
+    'sorvetes', 
+    'acai', 
+    'acompanhamentos', 
+    'congelados', 
+    'utensilhos', 
+    'colecionaveis', 
+    'potes',
+    'sazonais',
+    'campanhas'
+  ]
+  
+  try {
+    // Atualiza todas as tabelas em paralelo
+    await Promise.all(
+      tabelas.map(tabela => 
+        supabase
+          .from(tabela)
+          .update({ estoque: 0 })
+          .neq('id', 0) // Garante que atualize todos os registros
+      )
+    )
+  } catch (error) {
+    console.error('Erro ao limpar estoque:', error)
+    throw error
+  }
+}
+
+export async function inserirProduto(dados: {
+  item: string
+  categoria: 'sorvetes' | 'acai' | 'acompanhamentos' | 'congelados' | 'utensilhos' | 'colecionaveis' | 'potes' | 'sazonais' | 'campanhas'
+  situacao?: string
+  sugestao?: string
+  peso?: string
+  valor_produto?: string
+  valor_servico?: string
+  estoque?: number
+  disponivel_para_pedido?: boolean
+}) {
+  const supabase = getSupabaseClient()
+  
+  try {
+    const { data, error } = await supabase
+      .from(dados.categoria)
+      .insert([{
+        item: dados.item,
+        situacao: dados.situacao || 'Normal',
+        sugestao: dados.sugestao || '',
+        peso: dados.peso || '',
+        valor_produto: dados.valor_produto || '0',
+        valor_servico: dados.valor_servico || '0',
+        valor_total: '0',
+        estoque: dados.estoque || 0,
+        disponivel_para_pedido: dados.disponivel_para_pedido ?? true,
+        qtd: 0
+      }])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('Erro ao inserir produto:', error)
+    throw error
+  }
+}
+
+export async function deletePedido(pedidoId: number) {
+  const supabase = getSupabaseClient()
+  const { error } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", pedidoId)
+
+  if (error) {
+    console.error(`❌ Erro ao excluir pedido ${pedidoId}:`, error)
+    throw error
+  }
 }

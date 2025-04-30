@@ -11,6 +11,7 @@ import {
   salvarConferencia,
   salvarPendencias,
 } from "@/lib/supabase"
+import { atualizarEstoqueConferencia } from "@/lib/atualizar-estoque"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -337,6 +338,9 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
 
       // Salva a conferência
       await salvarConferencia(dadosConferencia);
+
+      // Atualiza o estoque
+      await atualizarEstoqueConferencia(dadosConferencia);
 
       // Define a mensagem apropriada
       if (atualizacoes.length > 0) {
