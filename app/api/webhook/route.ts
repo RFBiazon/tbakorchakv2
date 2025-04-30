@@ -3,8 +3,20 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
   try {
     const formData = await request.formData()
+    const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT
     
-    const response = await fetch(process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT || "", {
+    console.log('Webhook URL:', webhookUrl)
+    console.log('FormData contents:', {
+      data: formData.get('data'),
+      storeId: formData.get('storeId'),
+      uploadTimestamp: formData.get('uploadTimestamp')
+    })
+    
+    if (!webhookUrl) {
+      throw new Error('Webhook URL não configurada')
+    }
+
+    const response = await fetch(webhookUrl, {
       method: "POST",
       body: formData,
       headers: {
@@ -12,7 +24,18 @@ export async function POST(request: Request) {
       }
     })
 
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Webhook error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      })
+      throw new Error(`Erro no webhook: ${response.status} ${response.statusText}`)
+    }
+
     const data = await response.text()
+    console.log('Webhook success response:', data)
     
     return new NextResponse(data, {
       status: response.status,
