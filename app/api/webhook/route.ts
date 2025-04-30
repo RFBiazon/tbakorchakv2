@@ -6,11 +6,6 @@ export async function POST(request: Request) {
     const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT
     
     console.log('Webhook URL:', webhookUrl)
-    console.log('FormData contents:', {
-      data: formData.get('data'),
-      storeId: formData.get('storeId'),
-      uploadTimestamp: formData.get('uploadTimestamp')
-    })
     
     if (!webhookUrl) {
       throw new Error('Webhook URL não configurada')
@@ -28,12 +23,21 @@ export async function POST(request: Request) {
       throw new Error('storeId não encontrado no FormData')
     }
 
+    // Criar um novo FormData com o arquivo como blob
+    const newFormData = new FormData()
+    newFormData.append('data', new Blob([await file.arrayBuffer()], { type: file.type }), file.name)
+    newFormData.append('storeId', storeId.toString())
+    newFormData.append('uploadTimestamp', formData.get('uploadTimestamp')?.toString() || new Date().toISOString())
+
+    console.log('Enviando arquivo:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    })
+
     const response = await fetch(webhookUrl, {
       method: "POST",
-      body: formData,
-      headers: {
-        'Accept': 'application/json',
-      }
+      body: newFormData,
     })
 
     const responseText = await response.text()
