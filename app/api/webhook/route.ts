@@ -35,24 +35,27 @@ export async function POST(request: Request) {
       size: file.size
     })
 
-    const response = await fetch(webhookUrl, {
+    // Iniciar o envio do arquivo para n8n sem aguardar a resposta
+    fetch(webhookUrl, {
       method: "POST",
       body: newFormData,
+    }).then(async (response) => {
+      const responseText = await response.text()
+      console.log('Webhook response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText
+      })
+    }).catch((error) => {
+      console.error('Error in webhook processing:', error)
     })
-
-    const responseText = await response.text()
-    console.log('Webhook response:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
-    })
-
-    if (!response.ok) {
-      throw new Error(`Erro no webhook: ${response.status} ${response.statusText} - ${responseText}`)
-    }
     
-    return new NextResponse(responseText, {
-      status: response.status,
+    // Retornar sucesso imediatamente
+    return new NextResponse(JSON.stringify({ 
+      status: 'sucesso',
+      message: 'Imagem recebida com sucesso. O processamento foi iniciado e pode levar alguns instantes para ser concluído.'
+    }), {
+      status: 200,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -61,10 +64,10 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    console.error('Webhook error:', error)
+    console.error('Erro no webhook:', error)
     return new NextResponse(JSON.stringify({ 
-      error: 'Internal Server Error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Erro Interno do Servidor',
+      message: error instanceof Error ? error.message : 'Erro desconhecido'
     }), {
       status: 500,
       headers: {
