@@ -6,17 +6,23 @@ import { Camera, Upload, X, ZoomIn, ZoomOut, Save, Edit, Check, Trash2 } from "l
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "@/lib/supabase"
+import { supabase, checkAndRefreshSession, ensureAuthenticated } from "@/lib/supabase"
 import { HistoricoCompras } from "./historico-compras"
 import { toast } from "sonner"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface ProdutoCompra {
-  Fruta: string
-  Quantidade: string
-  "Valor Unitário / KG": string
-  "Valor Total": string
-  Data: string
-  Fornecedor: string
+  Fruta?: string
+  Quantidade?: string
+  "Valor Unitário / KG"?: string
+  "Valor Total"?: string
+  Data?: string
+  Fornecedor?: string
 }
 
 interface FileQueueItem {
@@ -55,6 +61,12 @@ const formatCurrency = (value: string) => {
     style: 'currency',
     currency: 'BRL'
   }).format(number)
+}
+
+const formatNumber = (value: string) => {
+  if (!value) return ''
+  const number = parseFloat(value)
+  return number.toString().replace('.', ',')
 }
 
 const formatDate = (dateString: string) => {
@@ -116,7 +128,7 @@ const ProdutosTable = ({
               <tr key={index} className={`border-b ${produto.isEdited ? 'bg-muted/50' : ''}`}>
                 <td className="p-3">
                   <Input
-                    value={produto.Fruta}
+                    value={produto.Fruta || ''}
                     onChange={(e) => onProdutoChange(index, 'Fruta', e.target.value)}
                     className="h-8"
                     disabled={!isEditing && savedCompraId !== undefined}
@@ -124,31 +136,31 @@ const ProdutosTable = ({
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto.Quantidade || ''}
-                    onChange={(e) => onProdutoChange(index, 'Quantidade', e.target.value)}
+                    value={produto.Quantidade ? String(produto.Quantidade).replace('.', ',') : ''}
+                    onChange={(e) => onProdutoChange(index, 'Quantidade', e.target.value.replace(',', '.'))}
                     className="h-8"
                     disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto["Valor Unitário / KG"] || ''}
-                    onChange={(e) => onProdutoChange(index, "Valor Unitário / KG", e.target.value)}
+                    value={produto["Valor Unitário / KG"] ? String(produto["Valor Unitário / KG"]).replace('.', ',') : ''}
+                    onChange={(e) => onProdutoChange(index, "Valor Unitário / KG", e.target.value.replace(',', '.'))}
                     className="h-8"
                     disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto["Valor Total"] || ''}
-                    onChange={(e) => onProdutoChange(index, "Valor Total", e.target.value)}
+                    value={produto["Valor Total"] ? String(produto["Valor Total"]).replace('.', ',') : ''}
+                    onChange={(e) => onProdutoChange(index, "Valor Total", e.target.value.replace(',', '.'))}
                     className="h-8"
                     disabled={!isEditing && savedCompraId !== undefined}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto.Fornecedor}
+                    value={produto.Fornecedor || ''}
                     onChange={(e) => onProdutoChange(index, 'Fornecedor', e.target.value)}
                     className="h-8"
                     disabled={!isEditing && savedCompraId !== undefined}
@@ -167,6 +179,9 @@ const ProdutosTable = ({
               <td className="p-3" colSpan={2}>
                 {savedCompraId === undefined ? (
                   onSave && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
                     <Button 
                       onClick={onSave}
                       className="w-full bg-green-500 hover:bg-green-600"
@@ -174,8 +189,17 @@ const ProdutosTable = ({
                       <Save className="w-4 h-4 mr-2" />
                       Salvar no Histórico
                     </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Salvar esta compra no histórico</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )
                 ) : isEditing ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                   <Button 
                     onClick={onSave}
                     className="w-full bg-green-500 hover:bg-green-600"
@@ -183,7 +207,16 @@ const ProdutosTable = ({
                     <Check className="w-4 h-4 mr-2" />
                     Salvar Alterações
                   </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Salvar as alterações feitas nesta compra</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 ) : onEdit && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                   <Button 
                     onClick={onEdit}
                     className="w-full bg-orange-500 hover:bg-orange-600"
@@ -191,6 +224,12 @@ const ProdutosTable = ({
                     <Edit className="w-4 h-4 mr-2" />
                     Editar
                   </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Editar os detalhes desta compra</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </td>
             </tr>
@@ -259,21 +298,22 @@ const ImageZoomModal = ({ imageUrl, onClose }: ImageZoomModalProps) => {
 
 export function CentralCompras() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [fileQueue, setFileQueue] = useState<FileQueueItem[]>([])
+  const [frutasFileQueue, setFrutasFileQueue] = useState<FileQueueItem[]>([])
+  const [diversasFileQueue, setDiversasFileQueue] = useState<FileQueueItem[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [zoomImage, setZoomImage] = useState<string | null>(null)
+  const frutasFileInputRef = useRef<HTMLInputElement>(null)
+  const diversasFileInputRef = useRef<HTMLInputElement>(null)
+  const [imageZooms, setImageZooms] = useState<{[key: number]: number}>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [showCamera, setShowCamera] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
 
-  // Novo estado para controlar o zoom de cada imagem
-  const [imageZooms, setImageZooms] = useState<{[key: number]: number}>({})
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>, tipo: 'frutas' | 'itens_diversos') => {
     const files = event.target.files
     if (!files) return
 
@@ -296,7 +336,11 @@ export function CentralCompras() {
       }
     })
 
-    setFileQueue(prev => [...prev, ...newFiles])
+    if (tipo === 'frutas') {
+      setFrutasFileQueue(prev => [...prev, ...newFiles])
+    } else {
+      setDiversasFileQueue(prev => [...prev, ...newFiles])
+    }
     setError(null)
   }
 
@@ -324,7 +368,7 @@ export function CentralCompras() {
         canvas.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" })
-            setFileQueue(prev => [...prev, {
+            setFrutasFileQueue(prev => [...prev, {
               file,
               preview: URL.createObjectURL(blob),
               status: 'pending',
@@ -345,13 +389,22 @@ export function CentralCompras() {
     setShowCamera(false)
   }
 
-  const removeFile = (index: number) => {
-    setFileQueue(prev => {
+  const removeFile = (index: number, tipo: 'frutas' | 'itens_diversos') => {
+    if (tipo === 'frutas') {
+      setFrutasFileQueue(prev => {
+        const newQueue = [...prev]
+        URL.revokeObjectURL(newQueue[index].preview)
+        newQueue.splice(index, 1)
+        return newQueue
+      })
+    } else {
+      setDiversasFileQueue(prev => {
       const newQueue = [...prev]
       URL.revokeObjectURL(newQueue[index].preview)
       newQueue.splice(index, 1)
       return newQueue
     })
+    }
   }
 
   const isWebhookResponse = (response: any): response is WebhookResponse => {
@@ -367,7 +420,12 @@ export function CentralCompras() {
     }))
   }
 
-  const handleProdutoChange = (fileIndex: number, produtoIndex: number, field: keyof EditableProduto, value: string) => {
+  const handleProdutoChange = (fileIndex: number, produtoIndex: number, field: keyof EditableProduto, value: string, tipo: 'frutas' | 'itens_diversos') => {
+    // Converte vírgula para ponto antes de processar o valor
+    const processedValue = value.replace(',', '.')
+    
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
+    
     setFileQueue(prev => {
       const newQueue = [...prev]
       const file = newQueue[fileIndex]
@@ -389,7 +447,10 @@ export function CentralCompras() {
     })
   }
 
-  const processQueue = async () => {
+  const processQueue = async (tipo: 'frutas' | 'itens_diversos') => {
+    const fileQueue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
+    
     if (fileQueue.length === 0) return
 
     setIsUploading(true)
@@ -405,6 +466,10 @@ export function CentralCompras() {
       return
     }
 
+    const webhookUrl = tipo === 'itens_diversos' 
+      ? process.env.NEXT_PUBLIC_WEBHOOK_DEMAIS_ITENS!
+      : process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT!
+
     for (let i = 0; i < fileQueue.length; i++) {
       if (fileQueue[i].status === 'error') continue
 
@@ -419,14 +484,17 @@ export function CentralCompras() {
         formData.append("data", fileQueue[i].file)
         formData.append("storeId", storeId)
         formData.append("uploadTimestamp", fileQueue[i].uploadTimestamp)
+        formData.append("webhookType", tipo === 'itens_diversos' ? 'demais_itens' : 'frutas')
 
-        const response = await fetch(process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT!, {
+        const response = await fetch('/api/webhook', {
           method: "POST",
-          body: formData,
+          body: formData
         })
 
         if (!response.ok) {
-          throw new Error("Erro ao enviar arquivo")
+          const errorText = await response.text()
+          console.error('Resposta do servidor:', errorText)
+          throw new Error(`Erro HTTP! status: ${response.status} - ${errorText}`)
         }
 
         const responseText = await response.text()
@@ -436,7 +504,6 @@ export function CentralCompras() {
           // Primeiro tenta fazer o parse da resposta completa
           const jsonResponse = JSON.parse(responseText)
           
-          // Se a resposta for um array direto, converte para o formato WebhookResponse
           if (Array.isArray(jsonResponse)) {
             parsedResponse = {
               entries: [{
@@ -446,7 +513,6 @@ export function CentralCompras() {
               }]
             }
           } else if (typeof jsonResponse === 'string') {
-            // Se for uma string JSON de array, tenta fazer o parse
             try {
               const produtos = JSON.parse(jsonResponse)
               if (Array.isArray(produtos)) {
@@ -468,9 +534,9 @@ export function CentralCompras() {
           } else {
             parsedResponse = responseText
           }
-        } catch {
-          // Se não conseguir fazer o parse como JSON, usa como string
-          parsedResponse = responseText
+        } catch (parseError) {
+          console.error('Erro ao processar resposta:', parseError)
+          throw new Error('Erro ao processar resposta do servidor')
         }
         
         setFileQueue(prev => {
@@ -484,15 +550,18 @@ export function CentralCompras() {
         })
 
       } catch (err) {
+        console.error('Erro ao processar arquivo:', err)
+        const errorMessage = err instanceof Error ? err.message : "Erro ao processar arquivo"
         setFileQueue(prev => {
           const newQueue = [...prev]
           newQueue[i] = { 
             ...newQueue[i], 
             status: 'error',
-            error: err instanceof Error ? err.message : "Erro ao enviar arquivo"
+            error: errorMessage
           }
           return newQueue
         })
+        toast.error(errorMessage)
       }
     }
 
@@ -500,7 +569,10 @@ export function CentralCompras() {
     setIsProcessing(false)
   }
 
-  const handleSaveToSupabase = async (index: number) => {
+  const handleSaveToSupabase = async (index: number, tipo: 'frutas' | 'itens_diversos') => {
+    const fileQueue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
+    
     const item = fileQueue[index]
     if (!item.response || typeof item.response === 'string') return
 
@@ -510,8 +582,33 @@ export function CentralCompras() {
         const produtos = parseProdutos(entry.data)
         
         try {
+          // Verificar se há uma loja selecionada
+          const selectedStore = localStorage.getItem("selectedStore")
+          if (!selectedStore) {
+            toast.error('Nenhuma loja selecionada. Por favor, selecione uma loja.')
+            return
+          }
+
+          // Verificar autenticação
+          const isAuthenticated = await ensureAuthenticated()
+          if (!isAuthenticated) {
+            toast.error('Sessão expirada. Por favor, faça login novamente.')
+            return
+          }
+
+          // Obter a sessão atual
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          if (sessionError || !session) {
+            console.error('Erro ao obter sessão:', sessionError)
+            toast.error('Erro de autenticação. Por favor, faça login novamente.')
+            return
+          }
+
+          // Usar o ID do usuário da sessão
+          const userId = session.user.id
+
           if (item.savedCompraId) {
-            // Se já existe um ID, atualizar o registro existente
+            // Atualizar registro existente
             const valorTotal = produtos.reduce((acc, produto) => {
               return acc + parseFloat(produto["Valor Total"] || "0")
             }, 0)
@@ -524,33 +621,61 @@ export function CentralCompras() {
                 valor_total: valorTotal
               })
               .eq('id', item.savedCompraId)
+              .eq('loja_id', userId)
 
-            if (compraError) throw compraError
+            if (compraError) {
+              console.error('Erro ao atualizar compra:', compraError)
+              toast.error('Erro ao atualizar compra. Por favor, tente novamente.')
+              return
+            }
 
             // Deletar itens antigos
             const { error: deleteError } = await supabase
               .from('itens_compra')
               .delete()
               .eq('compra_id', item.savedCompraId)
+              .eq('loja_id', userId)
 
-            if (deleteError) throw deleteError
+            if (deleteError) {
+              console.error('Erro ao deletar itens:', deleteError)
+              toast.error('Erro ao atualizar itens. Por favor, tente novamente.')
+              return
+            }
 
             // Inserir novos itens
             const itensPromises = produtos.map(produto => {
               return supabase.from('itens_compra').insert({
                 compra_id: item.savedCompraId,
-                produto: produto.Fruta,
-                quantidade: parseFloat(produto.Quantidade),
-                valor_unitario: parseFloat(produto["Valor Unitário / KG"]),
-                valor_total: parseFloat(produto["Valor Total"]),
-                fornecedor: produto.Fornecedor,
+                loja_id: userId,
+                produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
+                quantidade: parseFloat(produto.Quantidade || '0'),
+                valor_unitario: parseFloat(produto["Valor Unitário / KG"] || '0'),
+                valor_total: parseFloat(produto["Valor Total"] || '0'),
+                fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
                 data_compra: item.uploadTimestamp,
-                tipo_compra: 'fruta'
+                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
               })
             })
 
-            await Promise.all(itensPromises)
-            toast.success('Compra atualizada com sucesso!')
+            try {
+              await Promise.all(itensPromises)
+              
+              // Atualizar o estado com o status de edição
+              setFileQueue(prev => {
+                const newQueue = [...prev]
+                newQueue[index] = {
+                  ...newQueue[index],
+                  isEditing: false
+                }
+                return newQueue
+              })
+              
+              toast.success('Compra atualizada com sucesso!')
+            } catch (error) {
+              console.error('Erro ao inserir novos itens:', error)
+              toast.error('Erro ao salvar itens. Por favor, tente novamente.')
+              return
+            }
           } else {
             // Criar novo registro
             const valorTotal = produtos.reduce((acc, produto) => {
@@ -560,53 +685,72 @@ export function CentralCompras() {
             const { data: compraData, error: compraError } = await supabase
               .from('compras')
               .insert({
+                loja_id: userId,
                 fornecedor: produtos[0].Fornecedor || "Sem Fornecedor Cadastrado",
                 data_compra: item.uploadTimestamp,
                 valor_total: valorTotal,
-                tipo_compra: 'fruta'
+                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
               })
               .select()
               .single()
 
-            if (compraError) throw compraError
+            if (compraError) {
+              console.error('Erro ao criar compra:', compraError)
+              toast.error('Erro ao criar compra. Por favor, tente novamente.')
+              return
+            }
 
             const itensPromises = produtos.map(produto => {
               return supabase.from('itens_compra').insert({
                 compra_id: compraData.id,
-                produto: produto.Fruta,
-                quantidade: parseFloat(produto.Quantidade),
-                valor_unitario: parseFloat(produto["Valor Unitário / KG"]),
-                valor_total: parseFloat(produto["Valor Total"]),
-                fornecedor: produto.Fornecedor,
+                loja_id: userId,
+                produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
+                quantidade: parseFloat(produto.Quantidade || '0'),
+                valor_unitario: parseFloat(produto["Valor Unitário / KG"] || '0'),
+                valor_total: parseFloat(produto["Valor Total"] || '0'),
+                fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
                 data_compra: item.uploadTimestamp,
-                tipo_compra: 'fruta'
+                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
               })
             })
 
-            await Promise.all(itensPromises)
-
-            // Atualizar o estado com o ID da compra salva
-            setFileQueue(prev => {
-              const newQueue = [...prev]
-              newQueue[index] = {
-                ...newQueue[index],
-                savedCompraId: compraData.id,
-                isEditing: false
-              }
-              return newQueue
-            })
-
-            toast.success('Compra salva com sucesso!')
+            try {
+              await Promise.all(itensPromises)
+              
+              // Atualizar o estado com o ID da compra salva
+              setFileQueue(prev => {
+                const newQueue = [...prev]
+                newQueue[index] = {
+                  ...newQueue[index],
+                  savedCompraId: compraData.id,
+                  isEditing: false
+                }
+                return newQueue
+              })
+              
+              toast.success('Compra salva com sucesso!')
+            } catch (error) {
+              console.error('Erro ao inserir itens:', error)
+              toast.error('Erro ao salvar itens. Por favor, tente novamente.')
+              return
+            }
           }
         } catch (error) {
-          console.error('Erro ao salvar:', error)
-          toast.error('Erro ao salvar a compra')
+          console.error('Erro ao salvar compra:', error)
+          if (error instanceof Error && error.message.includes('Auth session missing')) {
+            toast.error('Sessão expirada. Por favor, faça login novamente.')
+          } else {
+            toast.error('Erro ao salvar compra. Por favor, tente novamente.')
+          }
+          return
         }
       }
     }
   }
 
-  const handleEdit = (index: number) => {
+  const handleEdit = (index: number, tipo: 'frutas' | 'itens_diversos') => {
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
+    
     setFileQueue(prev => {
       const newQueue = [...prev]
       newQueue[index] = {
@@ -617,12 +761,16 @@ export function CentralCompras() {
     })
   }
 
-  const handleClearQueue = () => {
-    // Limpar as URLs dos previews antes de limpar a fila
-    fileQueue.forEach(item => {
+  const handleClearQueue = (tipo: 'frutas' | 'itens_diversos') => {
+    const queue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue
+    queue.forEach(item => {
       URL.revokeObjectURL(item.preview)
     })
-    setFileQueue([])
+    if (tipo === 'frutas') {
+      setFrutasFileQueue([])
+    } else {
+      setDiversasFileQueue([])
+    }
     setError(null)
     setStatus(null)
   }
@@ -634,7 +782,7 @@ export function CentralCompras() {
       <Tabs defaultValue="frutas" className="space-y-4">
         <TabsList>
           <TabsTrigger value="frutas">Compra de Frutas</TabsTrigger>
-          <TabsTrigger value="outros">Outros Itens</TabsTrigger>
+          <TabsTrigger value="itens_diversos">Itens Diversos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
@@ -643,61 +791,42 @@ export function CentralCompras() {
             <CardHeader>
               <CardTitle>Cadastro de Compra de Frutas</CardTitle>
               <CardDescription>
-                Faça upload de notas fiscais ou tire fotos para registrar compras de frutas
+                Faça upload de notas fiscais para registrar compras de frutas
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
                 <div className="flex gap-4">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                   <Button
-                    onClick={() => fileInputRef.current?.click()}
+                          onClick={() => frutasFileInputRef.current?.click()}
                     className="flex-1"
                     disabled={isUploading || isProcessing}
                   >
                     <Upload className="mr-2 h-4 w-4" />
                     Selecionar Arquivos
                   </Button>
-                  <Button
-                    onClick={handleCameraCapture}
-                    className="flex-1"
-                    disabled={isUploading || isProcessing || showCamera}
-                  >
-                    <Camera className="mr-2 h-4 w-4" />
-                    Usar Câmera
-                  </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Selecionar notas fiscais para processamento</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
 
                 <input
                   type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileSelect}
+                  ref={frutasFileInputRef}
+                  onChange={(e) => handleFileSelect(e, 'frutas')}
                   accept=".jpg,.jpeg"
                   multiple
                   className="hidden"
                 />
 
-                {showCamera && (
-                  <div className="relative rounded-lg overflow-hidden">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full"
-                    />
-                    <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-                      <Button onClick={captureImage} variant="secondary">
-                        Capturar
-                      </Button>
-                      <Button onClick={stopCamera} variant="destructive">
-                        <X className="mr-2 h-4 w-4" />
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 <div className="grid gap-6">
-                  {fileQueue.map((item, index) => (
+                  {frutasFileQueue.map((item, index) => (
                     <div key={index} className="relative">
                       <div className="relative rounded-lg overflow-hidden border">
                         <div className="relative h-[400px] overflow-auto">
@@ -715,6 +844,9 @@ export function CentralCompras() {
                         <div className="absolute top-2 right-2 flex gap-2">
                           {item.status === 'completed' && (
                             <>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
                               <Button
                                 variant="outline"
                                 size="icon"
@@ -724,6 +856,15 @@ export function CentralCompras() {
                               >
                                 <ZoomOut className="h-4 w-4" />
                               </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Diminuir zoom</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
                               <Button
                                 variant="outline"
                                 size="icon"
@@ -733,15 +874,30 @@ export function CentralCompras() {
                               >
                                 <ZoomIn className="h-4 w-4" />
                               </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Aumentar zoom</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </>
                           )}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
                           <Button
-                            onClick={() => removeFile(index)}
+                                  onClick={() => removeFile(index, 'frutas')}
                             variant="destructive"
                             size="icon"
                           >
                             <X className="h-4 w-4" />
                           </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Remover arquivo</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </div>
 
@@ -777,11 +933,11 @@ export function CentralCompras() {
                                       produtos={parseProdutos(entry.data) as EditableProduto[]}
                                       uploadTimestamp={item.uploadTimestamp}
                                       onProdutoChange={(produtoIndex, field, value) => 
-                                        handleProdutoChange(index, produtoIndex, field, value)
+                                        handleProdutoChange(index, produtoIndex, field, value, 'frutas')
                                       }
-                                      onSave={() => handleSaveToSupabase(index)}
+                                      onSave={() => handleSaveToSupabase(index, 'frutas')}
                                       isEditing={item.isEditing}
-                                      onEdit={() => handleEdit(index)}
+                                      onEdit={() => handleEdit(index, 'frutas')}
                                       savedCompraId={item.savedCompraId}
                                     />
                                   )}
@@ -805,17 +961,22 @@ export function CentralCompras() {
                   </div>
                 )}
 
-                {fileQueue.length > 0 && (
+                {frutasFileQueue.length > 0 && (
                   <div className="flex gap-4">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
                     <Button
-                      onClick={fileQueue.every(item => item.status === 'completed') ? handleClearQueue : processQueue}
+                            onClick={frutasFileQueue.every(item => item.status === 'completed') 
+                              ? () => handleClearQueue('frutas') 
+                              : () => processQueue('frutas')}
                       disabled={isUploading || isProcessing}
-                      className={fileQueue.every(item => item.status === 'completed') 
+                            className={frutasFileQueue.every(item => item.status === 'completed') 
                         ? "w-full bg-red-500 hover:bg-red-600"
                         : "w-full"
                       }
                     >
-                      {fileQueue.every(item => item.status === 'completed') ? (
+                            {frutasFileQueue.every(item => item.status === 'completed') ? (
                         <>
                           <Trash2 className="mr-2 h-4 w-4" />
                           Limpar
@@ -824,6 +985,14 @@ export function CentralCompras() {
                         isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"
                       )}
                     </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{frutasFileQueue.every(item => item.status === 'completed') 
+                            ? "Limpar lista de arquivos" 
+                            : "Enviar arquivos para processamento"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 )}
               </div>
@@ -831,18 +1000,215 @@ export function CentralCompras() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="outros">
+        <TabsContent value="itens_diversos">
           <Card>
             <CardHeader>
-              <CardTitle>Cadastro de Outros Itens</CardTitle>
+              <CardTitle>Cadastro de Itens Diversos</CardTitle>
               <CardDescription>
-                Faça upload de notas fiscais ou tire fotos para registrar compras de outros itens
+                Faça upload de notas fiscais para registrar itens diversos
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Mesmo conteúdo do tab de frutas, mas com tipo_compra='outros' */}
-              <div className="text-center text-muted-foreground">
-                Em desenvolvimento. Por enquanto, use a mesma interface de frutas.
+              <div className="flex flex-col gap-4">
+                <div className="flex gap-4">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => diversasFileInputRef.current?.click()}
+                          className="flex-1"
+                          disabled={isUploading || isProcessing}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          Selecionar Arquivos
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Selecionar notas fiscais para processamento</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+
+                <input
+                  type="file"
+                  ref={diversasFileInputRef}
+                  onChange={(e) => handleFileSelect(e, 'itens_diversos')}
+                  accept=".jpg,.jpeg"
+                  multiple
+                  className="hidden"
+                />
+
+                <div className="grid gap-6">
+                  {diversasFileQueue.map((item, index) => (
+                    <div key={index} className="relative">
+                      <div className="relative rounded-lg overflow-hidden border">
+                        <div className="relative h-[400px] overflow-auto">
+                          <img
+                            src={item.preview}
+                            alt={`Preview ${index + 1}`}
+                            style={{
+                              transform: `scale(${imageZooms[index] || 1})`,
+                              transformOrigin: 'center',
+                              transition: 'transform 0.2s ease-in-out'
+                            }}
+                            className="w-full object-contain"
+                          />
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-2">
+                          {item.status === 'completed' && (
+                            <>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      onClick={() => handleZoom(index, false)}
+                                      disabled={(imageZooms[index] || 1) <= 0.5}
+                                      className="bg-background/80 backdrop-blur-sm"
+                                    >
+                                      <ZoomOut className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Diminuir zoom</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      onClick={() => handleZoom(index, true)}
+                                      disabled={(imageZooms[index] || 1) >= 3}
+                                      className="bg-background/80 backdrop-blur-sm"
+                                    >
+                                      <ZoomIn className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Aumentar zoom</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </>
+                          )}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => removeFile(index, 'itens_diversos')}
+                                  variant="destructive"
+                                  size="icon"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Remover arquivo</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
+
+                      {item.status === 'uploading' && (
+                        <div className="mt-2 text-blue-500">Enviando...</div>
+                      )}
+
+                      {item.status === 'error' && (
+                        <div className="mt-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                          {item.error}
+                        </div>
+                      )}
+
+                      {item.status === 'completed' && item.response && (
+                        <div className="mt-2">
+                          {typeof item.response === 'string' ? (
+                            <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
+                              {item.response}
+                            </div>
+                          ) : isWebhookResponse(item.response) ? (
+                            <div>
+                              {item.response.entries.map((entry: WebhookEntry, i: number) => (
+                                <div key={i}>
+                                  <div className={`p-3 rounded-lg mb-2 ${
+                                    entry.status === 'success' ? 'bg-green-500/10 text-green-500' : 
+                                    entry.status === 'error' ? 'bg-destructive/10 text-destructive' : 
+                                    'bg-blue-500/10 text-blue-500'
+                                  }`}>
+                                    {entry.message}
+                                  </div>
+                                  {entry.data && (
+                                    <ProdutosTable 
+                                      produtos={parseProdutos(entry.data) as EditableProduto[]}
+                                      uploadTimestamp={item.uploadTimestamp}
+                                      onProdutoChange={(produtoIndex, field, value) => 
+                                        handleProdutoChange(index, produtoIndex, field, value, 'itens_diversos')
+                                      }
+                                      onSave={() => handleSaveToSupabase(index, 'itens_diversos')}
+                                      isEditing={item.isEditing}
+                                      onEdit={() => handleEdit(index, 'itens_diversos')}
+                                      savedCompraId={item.savedCompraId}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-lg">
+                              Resposta recebida
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                {diversasFileQueue.length > 0 && (
+                  <div className="flex gap-4">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={diversasFileQueue.every(item => item.status === 'completed') 
+                              ? () => handleClearQueue('itens_diversos') 
+                              : () => processQueue('itens_diversos')}
+                            disabled={isUploading || isProcessing}
+                            className={diversasFileQueue.every(item => item.status === 'completed') 
+                              ? "w-full bg-red-500 hover:bg-red-600"
+                              : "w-full"
+                            }
+                          >
+                            {diversasFileQueue.every(item => item.status === 'completed') ? (
+                              <>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Limpar
+                              </>
+                            ) : (
+                              isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{diversasFileQueue.every(item => item.status === 'completed') 
+                            ? "Limpar lista de arquivos" 
+                            : "Enviar arquivos para processamento"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

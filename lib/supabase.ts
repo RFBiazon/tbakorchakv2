@@ -111,34 +111,185 @@ function getCurrentCredentials(): StoreCredentials {
   return getStoreCredentials(selectedStore)
 }
 
-// Armazena os clientes por loja
-const clientsMap = new Map<string, SupabaseClient>()
+// Singleton instance for the current store's client
+let currentClient: SupabaseClient | null = null
+let currentStore: string | null = null
+let currentSession: any = null
 
 // Função para criar um novo cliente Supabase
 export function createSupabaseClient(store?: string): SupabaseClient {
   try {
-    const credentials = store ? getStoreCredentials(store) : getCurrentCredentials()
-    console.log(`🔄 Criando cliente Supabase para a loja: ${store || 'atual'}`)
-
-    // Cria um novo cliente com as credenciais específicas da loja
-    const client = createClient(credentials.url, credentials.key, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-      },
-    })
-
-    // Armazena o cliente no map
-    if (store) {
-      clientsMap.set(store, client)
-      console.log(`✅ Cliente Supabase armazenado para loja: ${store}`)
+    // Se já temos um cliente e não estamos mudando de loja, retorna o existente
+    if (currentClient && (!store || store === currentStore)) {
+      return currentClient
     }
 
-    return client
+    // Para renderização no servidor
+    if (!isBrowser) {
+      const defaultCredentials = storeCredentials['toledo01']
+      currentClient = createClient(defaultCredentials.url, defaultCredentials.key, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
+          storage: undefined,
+        },
+      })
+      return currentClient
+    }
+
+    // Para o navegador
+    const targetStore = store || localStorage.getItem("selectedStore") || 'toledo01'
+    const credentials = getStoreCredentials(targetStore)
+    console.log(`🔄 Criando cliente Supabase para a loja: ${targetStore}`)
+
+    // Limpa o cliente anterior se estiver mudando de loja
+    if (currentClient && targetStore !== currentStore) {
+      try {
+        currentClient.auth.signOut()
+      } catch (e) {
+        console.warn('Erro ao fazer signOut do cliente anterior:', e)
+      }
+      currentClient = null
+      currentSession = null
+    }
+
+    // Se não temos um cliente, cria um novo
+    if (!currentClient) {
+      currentClient = createClient(credentials.url, credentials.key, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
+          storage: localStorage,
+          storageKey: `sb-${targetStore}-auth-token`,
+        },
+      })
+
+      // Configura listener para mudanças na sessão
+      currentClient.auth.onAuthStateChange((event, session) => {
+        currentSession = session
+        if (event === 'SIGNED_OUT') {
+          console.log('🔒 Usuário deslogado')
+          currentSession = null
+        } else if (event === 'SIGNED_IN') {
+          console.log('🔓 Usuário logado')
+        }
+      })
+    }
+
+    currentStore = targetStore
+    if (store && isBrowser) {
+      localStorage.setItem("selectedStore", store)
+      console.log(`✅ Loja ${store} salva no localStorage`)
+    }
+
+    return currentClient
   } catch (error) {
     console.error('❌ Erro ao criar cliente Supabase:', error)
-    throw error // Propaga o erro para tratamento adequado na camada superior
+    throw error
+  }
+}
+
+// Função para garantir autenticação
+export async function ensureAuthenticated(): Promise<boolean> {
+  if (!isBrowser) return false;
+
+  try {
+    const supabase = getSupabaseClient()
+    
+    // Primeiro verifica se temos uma sessão em memória
+    if (currentSession) {
+      const now = new Date()
+      const expiresAt = new Date(currentSession.expires_at * 1000)
+      
+      // Se a sessão ainda é válida e não está próxima de expirar
+      if (expiresAt > now && (expiresAt.getTime() - now.getTime()) > 5 * 60 * 1000) {
+        return true
+      }
+    }
+
+    // Tenta obter a sessão atual
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('Erro ao verificar sessão:', sessionError)
+      return await tryLogin()
+    }
+
+    // Se temos uma sessão, verifica se está expirada
+    if (session?.access_token && session?.expires_at) {
+      currentSession = session
+      const expiresAt = new Date(session.expires_at * 1000)
+      const now = new Date()
+      const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+      
+      // Se a sessão está próxima de expirar (menos de 5 minutos) ou já expirada
+      if (timeUntilExpiry < 5 * 60 * 1000) {
+        console.log('Sessão próxima de expirar, tentando renovar...')
+        const { data: { session: newSession }, error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshError) {
+          console.error('Erro ao renovar sessão:', refreshError)
+          return await tryLogin()
+        }
+
+        if (!newSession) {
+          console.log('Não foi possível renovar a sessão')
+          return await tryLogin()
+        }
+
+        currentSession = newSession
+        await currentClient?.auth.setSession(newSession)
+        return true
+      }
+
+      return true
+    }
+
+    // Se não tem sessão, tenta fazer login
+    return await tryLogin()
+  } catch (error) {
+    console.error('Erro ao verificar autenticação:', error)
+    return await tryLogin()
+  }
+}
+
+// Função auxiliar para tentar fazer login
+async function tryLogin(): Promise<boolean> {
+  try {
+    const email = localStorage.getItem('userEmail')
+    const password = localStorage.getItem('userPassword')
+
+    if (!email || !password) {
+      console.error('Credenciais não encontradas para login automático')
+      return false
+    }
+
+    const supabase = getSupabaseClient()
+    
+    // Tenta fazer login
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (error) {
+      console.error('Erro ao fazer login automático:', error)
+      return false
+    }
+
+    if (!data.session) {
+      console.error('Nenhuma sessão retornada após login')
+      return false
+    }
+
+    // Atualiza a sessão no cliente atual
+    await currentClient?.auth.setSession(data.session)
+    return true
+  } catch (error) {
+    console.error('Erro ao tentar login:', error)
+    return false
   }
 }
 
@@ -149,48 +300,21 @@ export function updateSupabaseCredentials(store: string): SupabaseClient {
   }
 
   console.log(`🔄 Atualizando credenciais para a loja: ${store}`)
-
-  // Remove o cliente anterior se existir
-  if (clientsMap.has(store)) {
-    console.log(`🗑️ Removendo cliente anterior da loja: ${store}`)
-    clientsMap.delete(store)
-  }
-
+  
+  // Reseta o cliente atual
+  currentClient = null
+  currentStore = null
+  
   // Cria um novo cliente com as credenciais da loja
-  const client = createSupabaseClient(store)
-
-  // Atualiza o localStorage apenas se estivermos no browser
-  if (isBrowser) {
-    localStorage.setItem("selectedStore", store)
-    console.log(`✅ Loja ${store} salva no localStorage`)
-  }
-
-  return client
+  return createSupabaseClient(store)
 }
 
-// Função para obter o cliente atual
+// Função para obter o cliente Supabase atual
 export function getSupabaseClient(): SupabaseClient {
-  if (!isBrowser) {
-    console.log('⚠️ Criando cliente padrão para ambiente servidor')
+  if (!currentClient) {
     return createSupabaseClient()
   }
-
-  const selectedStore = localStorage.getItem("selectedStore")
-  if (!selectedStore) {
-    console.log('⚠️ Nenhuma loja selecionada, criando cliente padrão')
-    return createSupabaseClient()
-  }
-
-  // Verifica se já existe um cliente para esta loja
-  const existingClient = clientsMap.get(selectedStore)
-  if (existingClient) {
-    console.log(`✅ Usando cliente existente para loja: ${selectedStore}`)
-    return existingClient
-  }
-
-  // Cria um novo cliente se não existir
-  console.log(`🔄 Criando novo cliente para loja: ${selectedStore}`)
-  return createSupabaseClient(selectedStore)
+  return currentClient
 }
 
 // Exporta o cliente padrão
@@ -489,7 +613,7 @@ export async function getPedidoById(pedidoId: string | number) {
       console.error(`❌ Erro ao buscar pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-  return data
+    return data
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pedido ${pedidoId}:`, error)
     throw error
@@ -504,18 +628,18 @@ export async function getConferenciaById(pedidoId: string | number) {
 
   try {
     const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from("conferidos")
-    .select("*")
-    .eq("pedido_id", pedidoId)
-    .order("data", { ascending: false })
-    .limit(1)
+    const { data, error } = await supabase
+      .from("conferidos")
+      .select("*")
+      .eq("pedido_id", pedidoId)
+      .order("data", { ascending: false })
+      .limit(1)
 
     if (error) {
       console.error(`❌ Erro ao buscar conferência do pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-  return data?.[0]
+    return data?.[0]
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar conferência do pedido ${pedidoId}:`, error)
     throw error
@@ -539,7 +663,7 @@ export async function getPendenciasByPedidoId(pedidoId: string | number) {
       console.error(`❌ Erro ao buscar pendências do pedido ${pedidoId} da loja ${selectedStore}:`, error)
       throw error
     }
-  return data || []
+    return data || []
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar pendências do pedido ${pedidoId}:`, error)
     throw error
@@ -562,7 +686,7 @@ export async function getAllPendencias() {
       console.error(`❌ Erro ao buscar todas as pendências da loja ${selectedStore}:`, error)
       throw error
     }
-  return data || []
+    return data || []
   } catch (error) {
     console.error(`❌ Erro detalhado ao buscar todas as pendências:`, error)
     throw error
@@ -584,31 +708,31 @@ export async function salvarConferencia(dados: {
 
   try {
     const supabase = getSupabaseClient()
-  const { data: existingData, error: checkError } = await supabase
-    .from("conferidos")
-    .select("id")
-    .eq("pedido_id", dados.pedido_id)
-    .order("data", { ascending: false })
-    .limit(1)
+    const { data: existingData, error: checkError } = await supabase
+      .from("conferidos")
+      .select("id")
+      .eq("pedido_id", dados.pedido_id)
+      .order("data", { ascending: false })
+      .limit(1)
 
-  if (checkError) throw checkError
+    if (checkError) throw checkError
 
-  let result
-  if (existingData && existingData.length > 0) {
-    // Atualizar registro existente
+    let result
+    if (existingData && existingData.length > 0) {
+      // Atualizar registro existente
       result = await supabase
         .from("conferidos")
         .update(dados)
         .eq("id", existingData[0].id)
-  } else {
-    // Inserir novo registro
+    } else {
+      // Inserir novo registro
       result = await supabase
         .from("conferidos")
         .insert([dados])
-  }
+    }
 
     if (result.error) throw result.error
-  return result
+    return result
   } catch (error) {
     console.error(`❌ Erro ao salvar conferência na loja ${selectedStore}:`, error)
     throw error
@@ -665,7 +789,7 @@ export async function salvarPendencias(dados: {
       throw error
     }
 
-  return { data: pendencias, error: null }
+    return { data: pendencias, error: null }
   } catch (error) {
     console.error(`❌ Erro detalhado ao salvar pendências:`, error)
     throw error
