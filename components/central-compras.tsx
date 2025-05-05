@@ -6,7 +6,7 @@ import { Camera, Upload, X, ZoomIn, ZoomOut, Save, Edit, Check, Trash2 } from "l
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase, checkAndRefreshSession, ensureAuthenticated } from "@/lib/supabase"
+import { supabase, ensureAuthenticated } from "@/lib/supabase"
 import { HistoricoCompras } from "./historico-compras"
 import { toast } from "sonner"
 import {
@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { v4 as uuidv4 } from 'uuid'
 
 interface ProdutoCompra {
   Fruta?: string
@@ -34,6 +35,8 @@ interface FileQueueItem {
   uploadTimestamp: string
   savedCompraId?: number
   isEditing?: boolean
+  uuid?: string
+  produtosEditaveis?: ProdutoCompra[]
 }
 
 interface WebhookEntry {
@@ -74,18 +77,20 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString('pt-BR')
 }
 
-const parseProdutos = (data: string | ProdutoCompra[]): ProdutoCompra[] => {
-  if (typeof data === 'string') {
-    try {
-      // Tenta fazer o parse do JSON string
-      return JSON.parse(data)
-    } catch {
-      console.error('Erro ao fazer parse dos produtos')
-      return []
-    }
+const parseProdutos = (data: any): ProdutoCompra[] => {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.itens)) {
+    return data.itens.map((item: any) => ({
+      Fruta: item.descricao ?? "",
+      Quantidade: item.quantidade ?? "",
+      "Valor Unitário / KG": item.valor_unitario !== undefined ? String(item.valor_unitario) : "",
+      "Valor Total": item.valor_total !== undefined ? String(item.valor_total) : "",
+      Fornecedor: data.emissor?.nome_fantasia || data.emissor?.razao_social || "",
+      Data: data.data_emissao || ""
+    }));
   }
-  return data
-}
+  return [];
+};
 
 const ProdutosTable = ({ 
   produtos, 
@@ -94,7 +99,9 @@ const ProdutosTable = ({
   onSave,
   isEditing,
   onEdit,
-  savedCompraId
+  savedCompraId,
+  onAddProduto,
+  onRemoveProduto
 }: { 
   produtos: EditableProduto[], 
   uploadTimestamp: string,
@@ -102,12 +109,21 @@ const ProdutosTable = ({
   onSave?: () => void,
   isEditing?: boolean,
   onEdit?: () => void,
-  savedCompraId?: number
+  savedCompraId?: number,
+  onAddProduto?: () => void,
+  onRemoveProduto?: (index: number) => void
 }) => {
+  console.log("ProdutosTable recebe:", produtos);
   const total = produtos.reduce((acc, produto) => {
-    const valor = produto["Valor Total"] ? parseFloat(produto["Valor Total"]) : 0
-    return acc + valor
+    let valor = 0;
+    if (produto["Valor Total"] && !isNaN(Number(produto["Valor Total"]))) {
+      valor = parseFloat(produto["Valor Total"] as string);
+    }
+    return acc + valor;
   }, 0)
+
+  // Forçar isEditing para true se não estiver definido
+  const editing = isEditing ?? true;
 
   return (
     <div className="mt-4 bg-card rounded-lg border shadow-sm">
@@ -121,6 +137,7 @@ const ProdutosTable = ({
               <th className="p-3 text-left font-medium">Valor Total</th>
               <th className="p-3 text-left font-medium">Fornecedor</th>
               <th className="p-3 text-left font-medium">Data</th>
+              {editing && <th className="p-3 text-left font-medium">Ações</th>}
             </tr>
           </thead>
           <tbody>
@@ -131,31 +148,31 @@ const ProdutosTable = ({
                     value={produto.Fruta || ''}
                     onChange={(e) => onProdutoChange(index, 'Fruta', e.target.value)}
                     className="h-8"
-                    disabled={!isEditing && savedCompraId !== undefined}
+                    disabled={!editing}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto.Quantidade ? String(produto.Quantidade).replace('.', ',') : ''}
+                    value={produto.Quantidade || ''}
                     onChange={(e) => onProdutoChange(index, 'Quantidade', e.target.value.replace(',', '.'))}
                     className="h-8"
-                    disabled={!isEditing && savedCompraId !== undefined}
+                    disabled={!editing}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto["Valor Unitário / KG"] ? String(produto["Valor Unitário / KG"]).replace('.', ',') : ''}
+                    value={produto["Valor Unitário / KG"] || ''}
                     onChange={(e) => onProdutoChange(index, "Valor Unitário / KG", e.target.value.replace(',', '.'))}
                     className="h-8"
-                    disabled={!isEditing && savedCompraId !== undefined}
+                    disabled={!editing}
                   />
                 </td>
                 <td className="p-3">
                   <Input
-                    value={produto["Valor Total"] ? String(produto["Valor Total"]).replace('.', ',') : ''}
+                    value={produto["Valor Total"] || ''}
                     onChange={(e) => onProdutoChange(index, "Valor Total", e.target.value.replace(',', '.'))}
                     className="h-8"
-                    disabled={!isEditing && savedCompraId !== undefined}
+                    disabled={!editing}
                   />
                 </td>
                 <td className="p-3">
@@ -163,10 +180,19 @@ const ProdutosTable = ({
                     value={produto.Fornecedor || ''}
                     onChange={(e) => onProdutoChange(index, 'Fornecedor', e.target.value)}
                     className="h-8"
-                    disabled={!isEditing && savedCompraId !== undefined}
+                    disabled={!editing}
                   />
                 </td>
                 <td className="p-3">{formatDate(uploadTimestamp)}</td>
+                {editing && (
+                  <td className="p-3">
+                    {onRemoveProduto && (
+                      <Button variant="destructive" size="icon" onClick={() => onRemoveProduto(index)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -176,12 +202,9 @@ const ProdutosTable = ({
               <td className="p-3">
                 {formatCurrency(total.toString())}
               </td>
-              <td className="p-3" colSpan={2}>
-                {savedCompraId === undefined ? (
+              <td className="p-3" colSpan={editing ? 3 : 2}>
+                {savedCompraId === undefined && editing ? (
                   onSave && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
                     <Button 
                       onClick={onSave}
                       className="w-full bg-green-500 hover:bg-green-600"
@@ -189,17 +212,8 @@ const ProdutosTable = ({
                       <Save className="w-4 h-4 mr-2" />
                       Salvar no Histórico
                     </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Salvar esta compra no histórico</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   )
-                ) : isEditing ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
+                ) : editing ? (
                   <Button 
                     onClick={onSave}
                     className="w-full bg-green-500 hover:bg-green-600"
@@ -207,16 +221,7 @@ const ProdutosTable = ({
                     <Check className="w-4 h-4 mr-2" />
                     Salvar Alterações
                   </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Salvar as alterações feitas nesta compra</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 ) : onEdit && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
                   <Button 
                     onClick={onEdit}
                     className="w-full bg-orange-500 hover:bg-orange-600"
@@ -224,15 +229,20 @@ const ProdutosTable = ({
                     <Edit className="w-4 h-4 mr-2" />
                     Editar
                   </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Editar os detalhes desta compra</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 )}
               </td>
             </tr>
+            {editing && (
+              <tr>
+                <td colSpan={editing ? 7 : 6} className="p-3">
+                  {onAddProduto && (
+                    <Button variant="outline" className="w-full" onClick={onAddProduto}>
+                      + Adicionar Produto
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            )}
           </tfoot>
         </table>
       </div>
@@ -312,6 +322,30 @@ export function CentralCompras() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [showCamera, setShowCamera] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
+
+  // Mapeamento estático das credenciais Supabase para cada loja
+  const SUPABASE_CONFIGS: Record<string, { url: string | undefined; key: string | undefined }> = {
+    TOLEDO01: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL_TOLEDO01,
+      key: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO01,
+    },
+    TOLEDO02: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL_TOLEDO02,
+      key: process.env.NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02,
+    },
+    VIDEIRA: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL_VIDEIRA,
+      key: process.env.NEXT_PUBLIC_SUPABASE_KEY_VIDEIRA,
+    },
+    FRAIBURGO: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL_FRAIBURGO,
+      key: process.env.NEXT_PUBLIC_SUPABASE_KEY_FRAIBURGO,
+    },
+    CAMPOMOURAO: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL_CAMPOMOURAO,
+      key: process.env.NEXT_PUBLIC_SUPABASE_KEY_CAMPOMOURAO,
+    },
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>, tipo: 'frutas' | 'itens_diversos') => {
     const files = event.target.files
@@ -421,31 +455,30 @@ export function CentralCompras() {
   }
 
   const handleProdutoChange = (fileIndex: number, produtoIndex: number, field: keyof EditableProduto, value: string, tipo: 'frutas' | 'itens_diversos') => {
-    // Converte vírgula para ponto antes de processar o valor
-    const processedValue = value.replace(',', '.')
-    
-    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
-    
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue;
     setFileQueue(prev => {
-      const newQueue = [...prev]
-      const file = newQueue[fileIndex]
-      
-      if (file.response && typeof file.response !== 'string' && file.response.entries) {
-        const entry = file.response.entries[0]
-        if (entry.data && Array.isArray(entry.data)) {
-          const newData = [...entry.data] as EditableProduto[]
-          newData[produtoIndex] = {
-            ...newData[produtoIndex],
-            [field]: value,
-            isEdited: true
-          }
-          entry.data = newData
+      const newQueue = [...prev];
+      const file = newQueue[fileIndex];
+      let produtos = file.produtosEditaveis ? [...file.produtosEditaveis] : [];
+      if (produtos[produtoIndex]) {
+        let newValue = value;
+        // Se for campo numérico, converte vírgula para ponto
+        if (field === 'Quantidade' || field === 'Valor Unitário / KG' || field === 'Valor Total') {
+          newValue = value.replace(',', '.');
         }
+        produtos[produtoIndex] = {
+          ...produtos[produtoIndex],
+          [field]: newValue
+        };
       }
-      
-      return newQueue
-    })
-  }
+      newQueue[fileIndex] = {
+        ...file,
+        produtosEditaveis: produtos,
+        isEditing: true
+      };
+      return newQueue;
+    });
+  };
 
   const processQueue = async (tipo: 'frutas' | 'itens_diversos') => {
     const fileQueue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue
@@ -468,15 +501,17 @@ export function CentralCompras() {
 
     const webhookUrl = tipo === 'itens_diversos' 
       ? process.env.NEXT_PUBLIC_WEBHOOK_DEMAIS_ITENS!
-      : process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT!
+      : process.env.NEXT_PUBLIC_WEBHOOK_FRUTAS!
 
     for (let i = 0; i < fileQueue.length; i++) {
       if (fileQueue[i].status === 'error') continue
 
       try {
+        // Gere o uuid antes de atualizar o estado
+        const uuid = uuidv4();
         setFileQueue(prev => {
           const newQueue = [...prev]
-          newQueue[i] = { ...newQueue[i], status: 'uploading' }
+          newQueue[i] = { ...newQueue[i], status: 'uploading', uuid }
           return newQueue
         })
 
@@ -485,6 +520,7 @@ export function CentralCompras() {
         formData.append("storeId", storeId)
         formData.append("uploadTimestamp", fileQueue[i].uploadTimestamp)
         formData.append("webhookType", tipo === 'itens_diversos' ? 'demais_itens' : 'frutas')
+        formData.append("uuid", uuid)
 
         const response = await fetch('/api/webhook', {
           method: "POST",
@@ -549,6 +585,41 @@ export function CentralCompras() {
           return newQueue
         })
 
+        // Após o envio, inicie o polling:
+        const interval = setInterval(async () => {
+          console.log('[Polling] Buscando status para uuid:', uuid);
+          const { data, error } = await fetchStatusAndData(uuid);
+          if (data && data.status === 'concluido') {
+            let responseData = data.dados;
+            if (typeof responseData === "string") {
+              try {
+                responseData = JSON.parse(responseData);
+              } catch {}
+            }
+            // Converta para produtos editáveis
+            const produtosEditaveis = parseProdutos(responseData);
+            setFileQueue(prev => {
+              const newQueue = [...prev];
+              const idx = newQueue.findIndex(item => item.uuid === uuid);
+              if (idx !== -1) {
+                newQueue[idx] = { 
+                  ...newQueue[idx], 
+                  status: 'completed', 
+                  response: responseData, 
+                  produtosEditaveis,
+                  isEditing: true 
+                };
+              }
+              return newQueue;
+            });
+            clearInterval(interval);
+          }
+          if (error) {
+            // Trate o erro se necessário
+            clearInterval(interval);
+          }
+        }, 5000);
+
       } catch (err) {
         console.error('Erro ao processar arquivo:', err)
         const errorMessage = err instanceof Error ? err.message : "Erro ao processar arquivo"
@@ -572,179 +643,202 @@ export function CentralCompras() {
   const handleSaveToSupabase = async (index: number, tipo: 'frutas' | 'itens_diversos') => {
     const fileQueue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue
     const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue
-    
     const item = fileQueue[index]
-    if (!item.response || typeof item.response === 'string') return
+    const produtos = item.produtosEditaveis || []
+    if (produtos.length === 0) return
 
-    if (isWebhookResponse(item.response)) {
-      const entry = item.response.entries[0]
-      if (entry.data && Array.isArray(entry.data)) {
-        const produtos = parseProdutos(entry.data)
-        
+    // Sanitize: garantir que todos os produtos tenham 'Valor Total' numérico
+    const sanitizedProdutos = produtos.map(produto => ({
+      ...produto,
+      ["Valor Total"]: produto["Valor Total"] && !isNaN(Number(produto["Valor Total"])) ? produto["Valor Total"] : "0"
+    }));
+
+    console.log('Produtos que serão salvos:', sanitizedProdutos);
+    sanitizedProdutos.forEach((p, i) => {
+      console.log(`Produto ${i}:`, p, 
+        'quantidade:', parseFloat(p.Quantidade || '0'),
+        'valor_unitario:', parseFloat(p["Valor Unitário / KG"] || '0'),
+        'valor_total:', parseFloat(p["Valor Total"] || '0')
+      );
+    });
+
+    try {
+      // Verificar se há uma loja selecionada
+      const selectedStore = localStorage.getItem("selectedStore")
+      if (!selectedStore) {
+        toast.error('Nenhuma loja selecionada. Por favor, selecione uma loja.')
+        return
+      }
+
+      // Verificar autenticação
+      const isAuthenticated = await ensureAuthenticated()
+      if (!isAuthenticated) {
+        toast.error('Sessão expirada. Por favor, faça login novamente.')
+        return
+      }
+
+      // Obter a sessão atual
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session) {
+        console.error('Erro ao obter sessão:', sessionError)
+        toast.error('Erro de autenticação. Por favor, faça login novamente.')
+        return
+      }
+
+      // Usar o ID do usuário da sessão
+      const userId = session.user.id
+
+      if (item.savedCompraId) {
+        // Deletar todos os itens antigos da compra
+        const { error: deleteError, data: deleteData } = await supabase
+          .from('itens_compra')
+          .delete()
+          .eq('compra_id', item.savedCompraId)
+          .eq('loja_id', userId);
+        console.log('Delete result:', deleteError, deleteData);
+
+        // Inserir todos os itens editados
+        console.log('Itens a inserir:', sanitizedProdutos);
+        const itensPromises = sanitizedProdutos.map(produto => {
+          const quantidade = parseFloat(produto.Quantidade || '0');
+          const valor_unitario = parseFloat(produto["Valor Unitário / KG"] || '0');
+          const valor_total = parseFloat(produto["Valor Total"] || '0');
+          return supabase.from('itens_compra').insert({
+            compra_id: item.savedCompraId,
+            loja_id: userId,
+            produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
+            quantidade,
+            valor_unitario,
+            valor_total,
+            fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
+            data_compra: item.uploadTimestamp,
+            tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
+          });
+        });
+
         try {
-          // Verificar se há uma loja selecionada
-          const selectedStore = localStorage.getItem("selectedStore")
-          if (!selectedStore) {
-            toast.error('Nenhuma loja selecionada. Por favor, selecione uma loja.')
-            return
-          }
-
-          // Verificar autenticação
-          const isAuthenticated = await ensureAuthenticated()
-          if (!isAuthenticated) {
-            toast.error('Sessão expirada. Por favor, faça login novamente.')
-            return
-          }
-
-          // Obter a sessão atual
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-          if (sessionError || !session) {
-            console.error('Erro ao obter sessão:', sessionError)
-            toast.error('Erro de autenticação. Por favor, faça login novamente.')
-            return
-          }
-
-          // Usar o ID do usuário da sessão
-          const userId = session.user.id
-
-          if (item.savedCompraId) {
-            // Atualizar registro existente
-            const valorTotal = produtos.reduce((acc, produto) => {
-              return acc + parseFloat(produto["Valor Total"] || "0")
-            }, 0)
-
-            // Atualizar a compra principal
-            const { error: compraError } = await supabase
-              .from('compras')
-              .update({
-                fornecedor: produtos[0].Fornecedor,
-                valor_total: valorTotal
-              })
-              .eq('id', item.savedCompraId)
-              .eq('loja_id', userId)
-
-            if (compraError) {
-              console.error('Erro ao atualizar compra:', compraError)
-              toast.error('Erro ao atualizar compra. Por favor, tente novamente.')
-              return
+          const results = await Promise.all(itensPromises);
+          results.forEach((result, idx) => {
+            if (result.error) {
+              console.error('Erro ao inserir item:', sanitizedProdutos[idx], result.error);
             }
-
-            // Deletar itens antigos
-            const { error: deleteError } = await supabase
-              .from('itens_compra')
-              .delete()
-              .eq('compra_id', item.savedCompraId)
-              .eq('loja_id', userId)
-
-            if (deleteError) {
-              console.error('Erro ao deletar itens:', deleteError)
-              toast.error('Erro ao atualizar itens. Por favor, tente novamente.')
-              return
+          });
+          setFileQueue(prev => {
+            const newQueue = [...prev]
+            newQueue[index] = {
+              ...newQueue[index],
+              produtosEditaveis: sanitizedProdutos,
+              isEditing: false
             }
-
-            // Inserir novos itens
-            const itensPromises = produtos.map(produto => {
-              return supabase.from('itens_compra').insert({
-                compra_id: item.savedCompraId,
-                loja_id: userId,
-                produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
-                quantidade: parseFloat(produto.Quantidade || '0'),
-                valor_unitario: parseFloat(produto["Valor Unitário / KG"] || '0'),
-                valor_total: parseFloat(produto["Valor Total"] || '0'),
-                fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
-                data_compra: item.uploadTimestamp,
-                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
-              })
-            })
-
-            try {
-              await Promise.all(itensPromises)
-              
-              // Atualizar o estado com o status de edição
-              setFileQueue(prev => {
-                const newQueue = [...prev]
-                newQueue[index] = {
-                  ...newQueue[index],
-                  isEditing: false
-                }
-                return newQueue
-              })
-              
-              toast.success('Compra atualizada com sucesso!')
-            } catch (error) {
-              console.error('Erro ao inserir novos itens:', error)
-              toast.error('Erro ao salvar itens. Por favor, tente novamente.')
-              return
-            }
-          } else {
-            // Criar novo registro
-            const valorTotal = produtos.reduce((acc, produto) => {
-              return acc + parseFloat(produto["Valor Total"] || "0")
-            }, 0)
-
-            const { data: compraData, error: compraError } = await supabase
-              .from('compras')
-              .insert({
-                loja_id: userId,
-                fornecedor: produtos[0].Fornecedor || "Sem Fornecedor Cadastrado",
-                data_compra: item.uploadTimestamp,
-                valor_total: valorTotal,
-                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
-              })
-              .select()
-              .single()
-
-            if (compraError) {
-              console.error('Erro ao criar compra:', compraError)
-              toast.error('Erro ao criar compra. Por favor, tente novamente.')
-              return
-            }
-
-            const itensPromises = produtos.map(produto => {
-              return supabase.from('itens_compra').insert({
-                compra_id: compraData.id,
-                loja_id: userId,
-                produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
-                quantidade: parseFloat(produto.Quantidade || '0'),
-                valor_unitario: parseFloat(produto["Valor Unitário / KG"] || '0'),
-                valor_total: parseFloat(produto["Valor Total"] || '0'),
-                fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
-                data_compra: item.uploadTimestamp,
-                tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
-              })
-            })
-
-            try {
-              await Promise.all(itensPromises)
-              
-              // Atualizar o estado com o ID da compra salva
-              setFileQueue(prev => {
-                const newQueue = [...prev]
-                newQueue[index] = {
-                  ...newQueue[index],
-                  savedCompraId: compraData.id,
-                  isEditing: false
-                }
-                return newQueue
-              })
-              
-              toast.success('Compra salva com sucesso!')
-            } catch (error) {
-              console.error('Erro ao inserir itens:', error)
-              toast.error('Erro ao salvar itens. Por favor, tente novamente.')
-              return
-            }
-          }
+            return newQueue
+          })
+          toast.success('Compra atualizada com sucesso!')
         } catch (error) {
-          console.error('Erro ao salvar compra:', error)
-          if (error instanceof Error && error.message.includes('Auth session missing')) {
-            toast.error('Sessão expirada. Por favor, faça login novamente.')
-          } else {
-            toast.error('Erro ao salvar compra. Por favor, tente novamente.')
-          }
+          console.error('Erro ao inserir novos itens:', error)
+          toast.error('Erro ao salvar itens. Por favor, tente novamente.')
+          return
+        }
+      } else {
+        // Criar novo registro
+        const valorTotal = sanitizedProdutos.reduce((acc, produto) => {
+          return acc + parseFloat(produto["Valor Total"] || "0")
+        }, 0)
+
+        const { data: compraData, error: compraError } = await supabase
+          .from('compras')
+          .insert({
+            loja_id: userId,
+            fornecedor: sanitizedProdutos[0].Fornecedor || "Sem Fornecedor Cadastrado",
+            data_compra: item.uploadTimestamp,
+            valor_total: valorTotal,
+            tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
+          })
+          .select()
+          .single()
+
+        if (compraError) {
+          console.error('Erro ao criar compra:', compraError)
+          toast.error('Erro ao criar compra. Por favor, tente novamente.')
+          return
+        }
+
+        const itensPromises = sanitizedProdutos.map(produto => {
+          const quantidade = parseFloat(produto.Quantidade || '0');
+          const valor_unitario = parseFloat(produto["Valor Unitário / KG"] || '0');
+          const valor_total = parseFloat(produto["Valor Total"] || '0');
+          return supabase.from('itens_compra').insert({
+            compra_id: compraData.id,
+            loja_id: userId,
+            produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
+            quantidade,
+            valor_unitario,
+            valor_total,
+            fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
+            data_compra: item.uploadTimestamp,
+            tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros'
+          });
+        });
+
+        try {
+          await Promise.all(itensPromises)
+          setFileQueue(prev => {
+            const newQueue = [...prev]
+            newQueue[index] = {
+              ...newQueue[index],
+              savedCompraId: compraData.id,
+              produtosEditaveis: sanitizedProdutos,
+              isEditing: false
+            }
+            return newQueue
+          })
+          toast.success('Compra salva com sucesso!')
+        } catch (error) {
+          console.error('Erro ao inserir itens:', error)
+          toast.error('Erro ao salvar itens. Por favor, tente novamente.')
           return
         }
       }
+
+      // No final do handleSaveToSupabase, após salvar no Supabase:
+      try {
+        const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_RECEBE_DADOS;
+        const storeId = localStorage.getItem("selectedStore");
+        if (webhookUrl) {
+          const categoria_envio = tipo === 'frutas' ? 'fruta' : 'demais_itens';
+          const compraPayload = {
+            storeId: storeId || '',
+            categoria_envio,
+            fornecedor: sanitizedProdutos[0]?.Fornecedor || 'Sem Fornecedor Cadastrado',
+            data: item.uploadTimestamp,
+            valor_total: sanitizedProdutos.reduce((acc, produto) => acc + parseFloat(produto["Valor Total"] || "0"), 0),
+            tipo_compra: tipo === 'frutas' ? 'fruta' : 'outros',
+            itens: sanitizedProdutos.map(produto => ({
+              produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
+              quantidade: parseFloat(produto.Quantidade || '0'),
+              valor_unitario: parseFloat(produto["Valor Unitário / KG"] || '0'),
+              valor_total: parseFloat(produto["Valor Total"] || '0'),
+              fornecedor: produto.Fornecedor || 'Sem Fornecedor Cadastrado',
+              data: item.uploadTimestamp
+            }))
+          };
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(compraPayload)
+          });
+          toast.success('Dados enviados com sucesso!');
+        }
+      } catch (err) {
+        toast.error('Erro ao enviar dados');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar compra:', error)
+      if (error instanceof Error && error.message.includes('Auth session missing')) {
+        toast.error('Sessão expirada. Por favor, faça login novamente.')
+      } else {
+        toast.error('Erro ao salvar compra. Por favor, tente novamente.')
+      }
+      return
     }
   }
 
@@ -774,6 +868,188 @@ export function CentralCompras() {
     setError(null)
     setStatus(null)
   }
+
+  // Função para buscar o status e dados pelo UUID
+  const fetchStatusAndData = async (uuid: string) => {
+    const selectedStore = localStorage.getItem("selectedStore")?.toUpperCase();
+    const config = SUPABASE_CONFIGS[selectedStore || "TOLEDO01"];
+    if (!config?.url || !config?.key) {
+      console.error('URL ou chave do Supabase não encontrada para a loja:', selectedStore);
+      return { data: null, error: 'Credenciais do Supabase não encontradas' };
+    }
+
+    const response = await fetch(
+      `${config.url}/rest/v1/processamento_compras?select=status,dados&id=eq.${uuid}`,
+      {
+        headers: {
+          'apikey': config.key,
+          'Authorization': `Bearer ${config.key}`,
+          'Accept': 'application/json'
+        }
+      }
+    );
+    const dataArr = await response.json();
+    const data = Array.isArray(dataArr) ? dataArr[0] : dataArr;
+    return { data, error: null };
+  };
+
+  const handleAddProduto = (fileIndex: number, tipo: 'frutas' | 'itens_diversos') => {
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue;
+    setFileQueue(prev => {
+      const newQueue = [...prev];
+      const file = newQueue[fileIndex];
+      let produtos = file.produtosEditaveis ? [...file.produtosEditaveis] : [];
+      produtos = [...produtos, { Fruta: '', Quantidade: '', "Valor Unitário / KG": '', "Valor Total": '', Fornecedor: '', Data: '' }];
+      newQueue[fileIndex] = {
+        ...file,
+        produtosEditaveis: produtos,
+        isEditing: true
+      };
+      return newQueue;
+    });
+  };
+
+  const handleRemoveProduto = (fileIndex: number, produtoIndex: number, tipo: 'frutas' | 'itens_diversos') => {
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue;
+    setFileQueue(prev => {
+      const newQueue = [...prev];
+      const file = newQueue[fileIndex];
+      let produtos = file.produtosEditaveis ? [...file.produtosEditaveis] : [];
+      produtos = produtos.filter((_, idx) => idx !== produtoIndex);
+      newQueue[fileIndex] = {
+        ...file,
+        produtosEditaveis: produtos,
+        isEditing: true
+      };
+      return newQueue;
+    });
+  };
+
+  const processSingleFile = async (tipo: 'frutas' | 'itens_diversos', index: number) => {
+    const fileQueue = tipo === 'frutas' ? frutasFileQueue : diversasFileQueue;
+    const setFileQueue = tipo === 'frutas' ? setFrutasFileQueue : setDiversasFileQueue;
+    const item = fileQueue[index];
+    if (!item || item.status !== 'pending') return;
+
+    setFileQueue(prev => {
+      const newQueue = [...prev];
+      newQueue[index] = { ...newQueue[index], status: 'uploading' };
+      return newQueue;
+    });
+
+    const storeId = localStorage.getItem("selectedStore");
+    if (!storeId) {
+      setError("Loja não selecionada");
+      return;
+    }
+
+    const uuid = uuidv4();
+    setFileQueue(prev => {
+      const newQueue = [...prev];
+      newQueue[index] = { ...newQueue[index], uuid, status: 'uploading' };
+      return newQueue;
+    });
+
+    const webhookUrl = tipo === 'itens_diversos'
+      ? process.env.NEXT_PUBLIC_WEBHOOK_DEMAIS_ITENS!
+      : process.env.NEXT_PUBLIC_WEBHOOK_FRUTAS!;
+
+    const formData = new FormData();
+    formData.append("data", item.file);
+    formData.append("storeId", storeId);
+    formData.append("uploadTimestamp", item.uploadTimestamp);
+    formData.append("webhookType", tipo === 'itens_diversos' ? 'demais_itens' : 'frutas');
+    formData.append("uuid", uuid);
+
+    const processingToastId = 'processing-toast';
+    toast.info('Processando arquivo, aguarde...', { id: processingToastId, duration: Infinity });
+
+    try {
+      const response = await fetch('/api/webhook', {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro HTTP! status: ${response.status} - ${errorText}`);
+      }
+      const responseText = await response.text();
+      let parsedResponse: WebhookResponse | string;
+      try {
+        const jsonResponse = JSON.parse(responseText);
+        if (Array.isArray(jsonResponse)) {
+          parsedResponse = {
+            entries: [{ status: 'success', message: 'Produtos processados com sucesso', data: jsonResponse }]
+          };
+        } else if (typeof jsonResponse === 'string') {
+          try {
+            const produtos = JSON.parse(jsonResponse);
+            if (Array.isArray(produtos)) {
+              parsedResponse = {
+                entries: [{ status: 'success', message: 'Produtos processados com sucesso', data: produtos }]
+              };
+            } else {
+              parsedResponse = responseText;
+            }
+          } catch {
+            parsedResponse = responseText;
+          }
+        } else if (isWebhookResponse(jsonResponse)) {
+          parsedResponse = jsonResponse;
+        } else {
+          parsedResponse = responseText;
+        }
+      } catch {
+        parsedResponse = responseText;
+      }
+      setFileQueue(prev => {
+        const newQueue = [...prev];
+        newQueue[index] = { ...newQueue[index], status: 'processing', response: parsedResponse };
+        return newQueue;
+      });
+      // Polling para status concluído
+      const interval = setInterval(async () => {
+        const { data, error } = await fetchStatusAndData(uuid);
+        if (data && data.status === 'concluido') {
+          let responseData = data.dados;
+          if (typeof responseData === "string") {
+            try { responseData = JSON.parse(responseData); } catch {}
+          }
+          const produtosEditaveis = parseProdutos(responseData);
+          setFileQueue(prev => {
+            const newQueue = [...prev];
+            const idx = newQueue.findIndex(item => item.uuid === uuid);
+            if (idx !== -1) {
+              newQueue[idx] = {
+                ...newQueue[idx],
+                status: 'completed',
+                response: responseData,
+                produtosEditaveis,
+                isEditing: true
+              };
+            }
+            return newQueue;
+          });
+          toast.dismiss(processingToastId);
+          toast.success('Itens processados com sucesso!');
+          clearInterval(interval);
+        }
+        if (error) {
+          toast.dismiss(processingToastId);
+          clearInterval(interval);
+        }
+      }, 5000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Erro ao processar arquivo";
+      setFileQueue(prev => {
+        const newQueue = [...prev];
+        newQueue[index] = { ...newQueue[index], status: 'error', error: errorMessage };
+        return newQueue;
+      });
+      toast.dismiss(processingToastId);
+      toast.error(errorMessage);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -842,113 +1118,46 @@ export function CentralCompras() {
                           />
                         </div>
                         <div className="absolute top-2 right-2 flex gap-2">
-                          {item.status === 'completed' && (
-                            <>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handleZoom(index, false)}
-                                disabled={(imageZooms[index] || 1) <= 0.5}
-                                className="bg-background/80 backdrop-blur-sm"
-                              >
-                                <ZoomOut className="h-4 w-4" />
-                              </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Diminuir zoom</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handleZoom(index, true)}
-                                disabled={(imageZooms[index] || 1) >= 3}
-                                className="bg-background/80 backdrop-blur-sm"
-                              >
-                                <ZoomIn className="h-4 w-4" />
-                              </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Aumentar zoom</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </>
+                          {item.status === 'pending' && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="bg-purple-600 hover:bg-purple-700"
+                              onClick={() => processSingleFile('frutas', index)}
+                            >
+                              Enviar
+                            </Button>
                           )}
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
+                          {item.status === 'processing' && (
+                            <div className="px-4 py-2 bg-purple-600 text-white rounded shadow animate-pulse">Processando...</div>
+                          )}
+                          {item.status === 'uploading' && (
+                            <div className="px-4 py-2 bg-blue-500 text-white rounded shadow animate-pulse">Enviando...</div>
+                          )}
                           <Button
-                                  onClick={() => removeFile(index, 'frutas')}
+                            onClick={() => removeFile(index, 'frutas')}
                             variant="destructive"
                             size="icon"
+                            disabled={item.status === 'processing' || item.status === 'uploading'}
                           >
                             <X className="h-4 w-4" />
                           </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Remover arquivo</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
                         </div>
                       </div>
 
-                      {item.status === 'uploading' && (
-                        <div className="mt-2 text-blue-500">Enviando...</div>
-                      )}
-
-                      {item.status === 'error' && (
-                        <div className="mt-2 p-3 bg-destructive/10 text-destructive rounded-lg">
-                          {item.error}
-                        </div>
-                      )}
-
-                      {item.status === 'completed' && item.response && (
+                      {item.status === 'completed' && item.produtosEditaveis && (
                         <div className="mt-2">
-                          {typeof item.response === 'string' ? (
-                            <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
-                              {item.response}
-                            </div>
-                          ) : isWebhookResponse(item.response) ? (
-                            <div>
-                              {item.response.entries.map((entry: WebhookEntry, i: number) => (
-                                <div key={i}>
-                                  <div className={`p-3 rounded-lg mb-2 ${
-                                    entry.status === 'success' ? 'bg-green-500/10 text-green-500' : 
-                                    entry.status === 'error' ? 'bg-destructive/10 text-destructive' : 
-                                    'bg-blue-500/10 text-blue-500'
-                                  }`}>
-                                    {entry.message}
-                                  </div>
-                                  {entry.data && (
-                                    <ProdutosTable 
-                                      produtos={parseProdutos(entry.data) as EditableProduto[]}
-                                      uploadTimestamp={item.uploadTimestamp}
-                                      onProdutoChange={(produtoIndex, field, value) => 
-                                        handleProdutoChange(index, produtoIndex, field, value, 'frutas')
-                                      }
-                                      onSave={() => handleSaveToSupabase(index, 'frutas')}
-                                      isEditing={item.isEditing}
-                                      onEdit={() => handleEdit(index, 'frutas')}
-                                      savedCompraId={item.savedCompraId}
-                                    />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-lg">
-                              Resposta recebida
-                            </div>
-                          )}
+                          <ProdutosTable
+                            produtos={item.produtosEditaveis}
+                            uploadTimestamp={item.uploadTimestamp}
+                            onProdutoChange={(produtoIndex, field, value) => handleProdutoChange(index, produtoIndex, field, value, 'frutas')}
+                            onSave={() => handleSaveToSupabase(index, 'frutas')}
+                            isEditing={item.isEditing}
+                            onEdit={() => handleEdit(index, 'frutas')}
+                            savedCompraId={item.savedCompraId}
+                            onAddProduto={() => handleAddProduto(index, 'frutas')}
+                            onRemoveProduto={(produtoIndex) => handleRemoveProduto(index, produtoIndex, 'frutas')}
+                          />
                         </div>
                       )}
                     </div>
@@ -958,41 +1167,6 @@ export function CentralCompras() {
                 {error && (
                   <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
                     {error}
-                  </div>
-                )}
-
-                {frutasFileQueue.length > 0 && (
-                  <div className="flex gap-4">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                    <Button
-                            onClick={frutasFileQueue.every(item => item.status === 'completed') 
-                              ? () => handleClearQueue('frutas') 
-                              : () => processQueue('frutas')}
-                      disabled={isUploading || isProcessing}
-                            className={frutasFileQueue.every(item => item.status === 'completed') 
-                        ? "w-full bg-red-500 hover:bg-red-600"
-                        : "w-full"
-                      }
-                    >
-                            {frutasFileQueue.every(item => item.status === 'completed') ? (
-                        <>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Limpar
-                        </>
-                      ) : (
-                        isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"
-                      )}
-                    </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{frutasFileQueue.every(item => item.status === 'completed') 
-                            ? "Limpar lista de arquivos" 
-                            : "Enviar arquivos para processamento"}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   </div>
                 )}
               </div>
@@ -1056,113 +1230,46 @@ export function CentralCompras() {
                           />
                         </div>
                         <div className="absolute top-2 right-2 flex gap-2">
-                          {item.status === 'completed' && (
-                            <>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      onClick={() => handleZoom(index, false)}
-                                      disabled={(imageZooms[index] || 1) <= 0.5}
-                                      className="bg-background/80 backdrop-blur-sm"
-                                    >
-                                      <ZoomOut className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Diminuir zoom</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      onClick={() => handleZoom(index, true)}
-                                      disabled={(imageZooms[index] || 1) >= 3}
-                                      className="bg-background/80 backdrop-blur-sm"
-                                    >
-                                      <ZoomIn className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Aumentar zoom</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </>
+                          {item.status === 'pending' && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="bg-purple-600 hover:bg-purple-700"
+                              onClick={() => processSingleFile('itens_diversos', index)}
+                            >
+                              Enviar
+                            </Button>
                           )}
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => removeFile(index, 'itens_diversos')}
-                                  variant="destructive"
-                                  size="icon"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Remover arquivo</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          {item.status === 'processing' && (
+                            <div className="px-4 py-2 bg-purple-600 text-white rounded shadow animate-pulse">Processando...</div>
+                          )}
+                          {item.status === 'uploading' && (
+                            <div className="px-4 py-2 bg-blue-500 text-white rounded shadow animate-pulse">Enviando...</div>
+                          )}
+                          <Button
+                            onClick={() => removeFile(index, 'itens_diversos')}
+                            variant="destructive"
+                            size="icon"
+                            disabled={item.status === 'processing' || item.status === 'uploading'}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
 
-                      {item.status === 'uploading' && (
-                        <div className="mt-2 text-blue-500">Enviando...</div>
-                      )}
-
-                      {item.status === 'error' && (
-                        <div className="mt-2 p-3 bg-destructive/10 text-destructive rounded-lg">
-                          {item.error}
-                        </div>
-                      )}
-
-                      {item.status === 'completed' && item.response && (
+                      {item.status === 'completed' && item.produtosEditaveis && (
                         <div className="mt-2">
-                          {typeof item.response === 'string' ? (
-                            <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
-                              {item.response}
-                            </div>
-                          ) : isWebhookResponse(item.response) ? (
-                            <div>
-                              {item.response.entries.map((entry: WebhookEntry, i: number) => (
-                                <div key={i}>
-                                  <div className={`p-3 rounded-lg mb-2 ${
-                                    entry.status === 'success' ? 'bg-green-500/10 text-green-500' : 
-                                    entry.status === 'error' ? 'bg-destructive/10 text-destructive' : 
-                                    'bg-blue-500/10 text-blue-500'
-                                  }`}>
-                                    {entry.message}
-                                  </div>
-                                  {entry.data && (
-                                    <ProdutosTable 
-                                      produtos={parseProdutos(entry.data) as EditableProduto[]}
-                                      uploadTimestamp={item.uploadTimestamp}
-                                      onProdutoChange={(produtoIndex, field, value) => 
-                                        handleProdutoChange(index, produtoIndex, field, value, 'itens_diversos')
-                                      }
-                                      onSave={() => handleSaveToSupabase(index, 'itens_diversos')}
-                                      isEditing={item.isEditing}
-                                      onEdit={() => handleEdit(index, 'itens_diversos')}
-                                      savedCompraId={item.savedCompraId}
-                                    />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-lg">
-                              Resposta recebida
-                            </div>
-                          )}
+                          <ProdutosTable
+                            produtos={item.produtosEditaveis}
+                            uploadTimestamp={item.uploadTimestamp}
+                            onProdutoChange={(produtoIndex, field, value) => handleProdutoChange(index, produtoIndex, field, value, 'itens_diversos')}
+                            onSave={() => handleSaveToSupabase(index, 'itens_diversos')}
+                            isEditing={item.isEditing}
+                            onEdit={() => handleEdit(index, 'itens_diversos')}
+                            savedCompraId={item.savedCompraId}
+                            onAddProduto={() => handleAddProduto(index, 'itens_diversos')}
+                            onRemoveProduto={(produtoIndex) => handleRemoveProduto(index, produtoIndex, 'itens_diversos')}
+                          />
                         </div>
                       )}
                     </div>
@@ -1172,41 +1279,6 @@ export function CentralCompras() {
                 {error && (
                   <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
                     {error}
-                  </div>
-                )}
-
-                {diversasFileQueue.length > 0 && (
-                  <div className="flex gap-4">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={diversasFileQueue.every(item => item.status === 'completed') 
-                              ? () => handleClearQueue('itens_diversos') 
-                              : () => processQueue('itens_diversos')}
-                            disabled={isUploading || isProcessing}
-                            className={diversasFileQueue.every(item => item.status === 'completed') 
-                              ? "w-full bg-red-500 hover:bg-red-600"
-                              : "w-full"
-                            }
-                          >
-                            {diversasFileQueue.every(item => item.status === 'completed') ? (
-                              <>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Limpar
-                              </>
-                            ) : (
-                              isUploading ? "Enviando..." : isProcessing ? "Processando..." : "Enviar Arquivos"
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{diversasFileQueue.every(item => item.status === 'completed') 
-                            ? "Limpar lista de arquivos" 
-                            : "Enviar arquivos para processamento"}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   </div>
                 )}
               </div>

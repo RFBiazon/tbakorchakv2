@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     
     const webhookUrl = webhookType === 'demais_itens'
       ? process.env.NEXT_PUBLIC_WEBHOOK_DEMAIS_ITENS
-      : process.env.NEXT_PUBLIC_WEBHOOK_IMAGE_EXTRACT
+      : process.env.NEXT_PUBLIC_WEBHOOK_FRUTAS
 
     if (!webhookUrl) {
       return NextResponse.json(

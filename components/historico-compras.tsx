@@ -52,6 +52,7 @@ export function HistoricoCompras() {
   const [editingCompra, setEditingCompra] = useState<number | null>(null)
   const [tipoHistorico, setTipoHistorico] = useState<'fruta' | 'outros'>('fruta')
   const router = useRouter()
+  const [editBuffer, setEditBuffer] = useState<Record<string, string>>({})
 
   const fetchCompras = async () => {
     try {
@@ -150,7 +151,7 @@ export function HistoricoCompras() {
   }
 
   const formatNumber = (value: number) => {
-    return value.toString().replace('.', ',')
+    return value.toFixed(2).replace('.', ',');
   }
 
   const formatDate = (dateString: string) => {
@@ -193,13 +194,13 @@ export function HistoricoCompras() {
       }
 
       const supabase = getSupabaseClient()
-      
       // Get the current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
         throw new Error('Erro ao obter sessão do usuário')
       }
 
+      // Atualiza o cabeçalho da compra
       const { error } = await supabase
         .from('compras')
         .update({
@@ -216,6 +217,30 @@ export function HistoricoCompras() {
         throw error
       }
 
+      // Atualiza os itens da compra
+      // 1. Deleta todos os itens antigos
+      await supabase
+        .from('itens_compra')
+        .delete()
+        .eq('compra_id', compra.id)
+        .eq('loja_id', session.user.id)
+
+      // 2. Insere todos os itens editados
+      const itensPromises = (compra.itens || []).map(item =>
+        supabase.from('itens_compra').insert({
+          compra_id: compra.id,
+          loja_id: session.user.id,
+          produto: item.produto,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          valor_total: item.valor_total,
+          fornecedor: compra.fornecedor,
+          data_compra: compra.data_compra,
+          tipo_compra: compra.tipo_compra
+        })
+      )
+      await Promise.all(itensPromises)
+
       toast.success('Alterações salvas com sucesso')
       setEditingCompra(null)
       await fetchCompras() // Recarrega os dados
@@ -228,45 +253,63 @@ export function HistoricoCompras() {
   }
 
   const handleItemChange = (compraId: number, itemId: number, field: keyof ItemCompra, value: string) => {
-    // Converte vírgula para ponto antes de processar o valor
-    const processedValue = value.replace(',', '.')
-    
+    // Atualiza o buffer temporário
+    setEditBuffer(prev => ({
+      ...prev,
+      [`${compraId}-${itemId}-${field}`]: value
+    }));
+    // Aceita vírgula ou ponto como separador decimal
+    const processedValue = value.replace(',', '.');
     setCompras(prev => {
       return prev.map(compra => {
-        if (compra.id !== compraId) return compra
-
+        if (compra.id !== compraId) return compra;
         const newItens = compra.itens?.map(item => {
-          if (item.id !== itemId) return item
-
-          let newItem = { ...item }
+          if (item.id !== itemId) return item;
+          let newItem = { ...item };
           if (field === 'quantidade' || field === 'valor_unitario') {
-            const numValue = parseFloat(processedValue) || 0
-            newItem[field] = numValue
+            // Permite decimais
+            const numValue = parseFloat(processedValue) || 0;
+            newItem[field] = numValue;
             // Recalcular valor total
             if (field === 'quantidade') {
-              newItem.valor_total = numValue * newItem.valor_unitario
+              newItem.valor_total = numValue * newItem.valor_unitario;
             } else {
-              newItem.valor_total = newItem.quantidade * numValue
+              newItem.valor_total = newItem.quantidade * numValue;
             }
           } else if (field === 'valor_total') {
-            newItem.valor_total = parseFloat(processedValue) || 0
+            newItem.valor_total = parseFloat(processedValue) || 0;
           } else {
-            (newItem as any)[field] = processedValue
+            (newItem as any)[field] = processedValue;
           }
-          return newItem
-        })
-
+          return newItem;
+        });
         // Recalcular valor total da compra
-        const novoValorTotal = newItens?.reduce((acc, item) => acc + item.valor_total, 0) || 0
-
+        const novoValorTotal = newItens?.reduce((acc, item) => acc + item.valor_total, 0) || 0;
         return {
           ...compra,
           itens: newItens,
           valor_total: novoValorTotal
+        };
+      });
+    });
+  };
+
+  // Função para formatar ao sair do campo
+  const handleBlur = (compraId: number, itemId: number, field: keyof ItemCompra) => {
+    setEditBuffer(prev => {
+      const key = `${compraId}-${itemId}-${field}`;
+      const value = prev[key];
+      if (value !== undefined) {
+        // Formata para duas casas decimais e vírgula
+        let formatted = value.replace(',', '.');
+        if (!isNaN(Number(formatted)) && formatted !== '') {
+          formatted = Number(formatted).toFixed(2).replace('.', ',');
         }
-      })
-    })
-  }
+        return { ...prev, [key]: formatted };
+      }
+      return prev;
+    });
+  };
 
   const handleClearHistory = async () => {
     try {
@@ -488,8 +531,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.quantidade.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-quantidade`] ?? formatNumber(item.quantidade)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'quantidade', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'quantidade')}
                                           className="h-8"
                                           type="text"
                                         />
@@ -500,8 +544,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.valor_unitario.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-valor_unitario`] ?? formatNumber(item.valor_unitario)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'valor_unitario', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'valor_unitario')}
                                           className="h-8"
                                           type="text"
                                         />
@@ -512,8 +557,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.valor_total.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-valor_total`] ?? formatNumber(item.valor_total)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'valor_total', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'valor_total')}
                                           className="h-8"
                                           type="text"
                                         />
@@ -674,8 +720,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.quantidade.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-quantidade`] ?? formatNumber(item.quantidade)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'quantidade', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'quantidade')}
                                           className="h-8"
                                           type="text"
                                         />
@@ -686,8 +733,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.valor_unitario.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-valor_unitario`] ?? formatNumber(item.valor_unitario)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'valor_unitario', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'valor_unitario')}
                                           className="h-8"
                                           type="text"
                                         />
@@ -698,8 +746,9 @@ export function HistoricoCompras() {
                                     <TableCell>
                                       {editingCompra === compra.id ? (
                                         <Input
-                                          value={item.valor_total.toString().replace('.', ',')}
+                                          value={editBuffer[`${compra.id}-${item.id}-valor_total`] ?? formatNumber(item.valor_total)}
                                           onChange={(e) => handleItemChange(compra.id, item.id, 'valor_total', e.target.value)}
+                                          onBlur={() => handleBlur(compra.id, item.id, 'valor_total')}
                                           className="h-8"
                                           type="text"
                                         />
