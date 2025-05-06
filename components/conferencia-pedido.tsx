@@ -16,9 +16,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Home, Package, AlertTriangle, Lock, XCircle, HelpCircle } from "lucide-react"
-import { atualizarEstoqueConferencia } from "@/lib/atualizar-estoque"
 import { ProdutoNaoEncontradoDialog } from "@/components/produto-nao-encontrado-dialog"
-import { toast } from "react-hot-toast"
+import { toast } from "sonner"
 
 type Produto = {
   nome: string
@@ -72,6 +71,12 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
   useEffect(() => {
     carregarPedido()
   }, [pedidoId])
+
+  useEffect(() => {
+    if (mensagem && redirecionar) {
+      toast.success(mensagem, { duration: 3500 });
+    }
+  }, [mensagem, redirecionar]);
 
   async function carregarPedido() {
     try {
@@ -274,10 +279,6 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
         throw new Error(`Erro ao salvar conferência: ${conferenciaResult.error}`)
       }
 
-      // Atualiza o estoque
-      console.log("Atualizando estoque...")
-      await atualizarEstoqueConferencia(dadosConferencia)
-
       // Atualiza a mensagem e inicia a transição
       setMensagem(pendencias.length > 0 
         ? "⚠️ Pedido conferido com itens pendentes" 
@@ -473,14 +474,6 @@ export function ConferenciaPedido({ pedidoId }: { pedidoId: string }) {
           {salvando ? "Salvando..." : "Salvar Conferência"}
         </Button>
       </div>
-
-      {mensagem && redirecionar && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center transition-all duration-300">
-          <div className="bg-background p-6 rounded-lg shadow-lg text-center transform scale-100 transition-transform duration-300">
-            <p className="text-2xl font-medium">{mensagem}</p>
-          </div>
-        </div>
-      )}
 
       {mensagem && !redirecionar && (
         <p className="mt-4 text-center text-primary">{mensagem}</p>

@@ -11,7 +11,6 @@ import {
   salvarConferencia,
   salvarPendencias,
 } from "@/lib/supabase"
-import { atualizarEstoqueConferencia } from "@/lib/atualizar-estoque"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Home } from "lucide-react"
+import { toast } from "sonner"
 
 interface Conferencia {
   id: number;
@@ -108,6 +108,12 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
       setQuantidadesAtualizacao(quantidadesIniciais);
     }
   }, [produtos]);
+
+  useEffect(() => {
+    if (mensagem) {
+      toast.success(mensagem, { duration: 3500 });
+    }
+  }, [mensagem]);
 
   async function carregarDados() {
     try {
@@ -339,9 +345,6 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
       // Salva a conferência
       await salvarConferencia(dadosConferencia);
 
-      // Atualiza o estoque
-      await atualizarEstoqueConferencia(dadosConferencia);
-
       // Define a mensagem apropriada
       if (atualizacoes.length > 0) {
         setMensagem("⚠️ Pedido atualizado com itens pendentes");
@@ -511,14 +514,6 @@ export function VisualizarPedido({ pedidoId }: { pedidoId: string }) {
           >
             {salvando ? "Atualizando..." : "Atualizar Quantidades"}
           </Button>
-        </div>
-      )}
-
-      {mensagem && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center transition-all duration-300">
-          <div className="bg-background p-6 rounded-lg shadow-lg text-center transform scale-100 transition-transform duration-300">
-            <p className="text-2xl font-medium">{mensagem}</p>
-          </div>
         </div>
       )}
 

@@ -312,11 +312,20 @@ export function ListaPedidos() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleArquivar(pedido.id, pedido.numero)}
-                        className="text-green-500 hover:text-green-400"
-                        title="Arquivar"
+                        onClick={() => handleDesarquivar(pedido.id)}
+                        className="text-yellow-500 hover:text-yellow-400"
+                        title="Desarquivar"
                       >
-                        📥
+                        📤
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(pedido.id)}
+                        className="text-red-500 hover:text-red-400"
+                        title="Excluir pedido"
+                      >
+                        <Trash2 size={18} />
                       </Button>
                     </div>
                   </li>
