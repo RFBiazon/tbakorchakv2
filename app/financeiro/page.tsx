@@ -29,14 +29,12 @@ import {
   Trash2,
   Edit,
   ArrowUpRight,
-  ArrowDownRight,
-  ArrowUp,
-  ArrowDown
+  ArrowDownRight
 } from "lucide-react"
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts"
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ReferenceLine, Tooltip as RechartsTooltip } from "recharts"
 import { toast } from "sonner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -95,6 +93,38 @@ interface DadosCaixa {
   historico: HistoricoCaixa[]
 }
 
+interface BenchmarkStore {
+  id: number
+  company_name: string
+  franchisee_id: null
+  store_city: string
+  balance: {
+    change_amount: number
+    discount: number
+    credit_card: number
+    debit_card: number
+    delivery_sale: number
+    money: number
+    pix: number
+    online: number
+    store_sale: number
+    ticket: number
+    total: number
+    total_app: number
+    total_delivery: number
+    total_ifood: number
+    total_others: number
+    total_store: number
+  }
+  percent: number
+  position: number
+}
+
+interface BenchmarkResponse {
+  message: string
+  content: BenchmarkStore[]
+}
+
 const categorias = {
   entrada: [
     'Vendas',
@@ -134,204 +164,6 @@ const chartConfig = {
   },
 }
 
-// Mapeamento de nomes amigáveis para as lojas
-const nomesAmigaveis: Record<string, string> = {
-  "Toledo - PR 01 - JD. La Salle": "Toledo Lago",
-  "campo mourão - pr": "Campo Mourão",
-  "fraiburgo - sc": "Fraiburgo",
-  "Videira - SC": "Videira",
-  "Toledo - PR 02 - Boa Esperança": "Toledo Pioneiro"
-};
-
-function BenchmarkAnalytics({ lojas, formatarDataParaApi, formatarMoeda, obterToken }: any) {
-  const [dataInicial, setDataInicial] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [dataFinal, setDataFinal] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [lojaSelecionada, setLojaSelecionada] = useState<string>(Object.keys(lojas)[0]);
-  const [dados, setDados] = useState<any[]>([]);
-  const [carregando, setCarregando] = useState(false);
-  const [sortBy, setSortBy] = useState<string>('position');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  const buscarBenchmark = async () => {
-    setCarregando(true);
-    setDados([]);
-    try {
-      const token = await obterToken();
-      const dataInicialFormatada = formatarDataParaApi(dataInicial);
-      const dataFinalFormatada = formatarDataParaApi(dataFinal);
-      const lojaId = lojas[lojaSelecionada as keyof typeof lojas];
-      const url = `https://amatech-prd.azure-api.net/api/analytics/midas/benchmark?data_inicial=${dataInicialFormatada}&data_final=${dataFinalFormatada}&user=${lojaId}&selected_stores=false&state=&own_store=false&search_type=customize`;
-      console.log('URL da requisição Benchmark:', url);
-      const resp = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      const json = await resp.json();
-      console.log('Resposta da API Benchmark:', json);
-      setDados(json.content || []);
-    } catch (e) {
-      console.error('Erro ao buscar benchmark:', e);
-      setDados([]);
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  // Função para alternar ordenação
-  const handleSort = (col: string) => {
-    if (sortBy === col) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(col);
-      setSortDirection('asc');
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <Label>Loja</Label>
-          <Select value={lojaSelecionada} onValueChange={setLojaSelecionada}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.keys(lojas).map(loja => (
-                <SelectItem key={loja} value={loja}>{loja}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Data Inicial</Label>
-          <Input type="date" value={dataInicial} onChange={e => setDataInicial(e.target.value)} />
-        </div>
-        <div>
-          <Label>Data Final</Label>
-          <Input type="date" value={dataFinal} onChange={e => setDataFinal(e.target.value)} />
-        </div>
-        <div className="flex items-end">
-          <Button onClick={buscarBenchmark} disabled={carregando} className="w-full">
-            {carregando ? 'Carregando...' : 'Consultar'}
-          </Button>
-        </div>
-      </div>
-      {dados.length > 0 && (
-        (() => {
-          // Filtrar a loja carazinho - rs (vendida)
-          let dadosFiltrados = dados.filter((item: any) => item.company_name.toLowerCase() !== 'carazinho - rs (vendida)');
-
-          // Ordenar os dados filtrados
-          dadosFiltrados = [...dadosFiltrados].sort((a, b) => {
-            let aValue = a[sortBy];
-            let bValue = b[sortBy];
-            // Para balance.*
-            if (sortBy.startsWith('balance.')) {
-              aValue = a.balance[sortBy.split('.')[1]];
-              bValue = b.balance[sortBy.split('.')[1]];
-            }
-            // Para nomes amigáveis
-            if (sortBy === 'company_name') {
-              aValue = nomesAmigaveis[a.company_name] || a.company_name;
-              bValue = nomesAmigaveis[b.company_name] || b.company_name;
-            }
-            if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-            if (typeof bValue === 'string') bValue = bValue.toLowerCase();
-            if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-            if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-            return 0;
-          });
-
-          // Calcular somatórios
-          const totalFaturamento = dadosFiltrados.reduce((acc, item) => acc + (item.balance.total || 0), 0);
-          const totalDinheiro = dadosFiltrados.reduce((acc, item) => acc + (item.balance.money || 0), 0);
-          const totalPix = dadosFiltrados.reduce((acc, item) => acc + (item.balance.pix || 0), 0);
-          const totalCredito = dadosFiltrados.reduce((acc, item) => acc + (item.balance.credit_card || 0), 0);
-          const totalDebito = dadosFiltrados.reduce((acc, item) => acc + (item.balance.debit_card || 0), 0);
-          const totalTicket = dadosFiltrados.reduce((acc, item) => acc + (item.balance.ticket || 0), 0);
-          // Maior faturamento para ranking visual
-          const maiorFaturamento = Math.max(...dadosFiltrados.map(item => item.balance.total || 0), 1);
-
-          return (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('position')}>Ranking{sortBy === 'position' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('company_name')}>Loja{sortBy === 'company_name' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.total')}>Faturamento{sortBy === 'balance.total' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.money')}>Dinheiro{sortBy === 'balance.money' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.pix')}>PIX{sortBy === 'balance.pix' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.credit_card')}>Crédito{sortBy === 'balance.credit_card' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.debit_card')}>Débito{sortBy === 'balance.debit_card' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('balance.ticket')}>Ticket{sortBy === 'balance.ticket' && (sortDirection === 'asc' ? <ArrowUp className="inline w-4 h-4 ml-1" /> : <ArrowDown className="inline w-4 h-4 ml-1" />)}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dadosFiltrados.map((item: any) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.position}</TableCell>
-                        <TableCell>{nomesAmigaveis[item.company_name] || item.company_name}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.total)}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.money)}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.pix)}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.credit_card)}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.debit_card)}</TableCell>
-                        <TableCell>{formatarMoeda(item.balance.ticket)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {/* Linha de somatório */}
-                    <TableRow className="font-bold bg-muted">
-                      <TableCell></TableCell>
-                      <TableCell>Total</TableCell>
-                      <TableCell>{formatarMoeda(totalFaturamento)}</TableCell>
-                      <TableCell>{formatarMoeda(totalDinheiro)}</TableCell>
-                      <TableCell>{formatarMoeda(totalPix)}</TableCell>
-                      <TableCell>{formatarMoeda(totalCredito)}</TableCell>
-                      <TableCell>{formatarMoeda(totalDebito)}</TableCell>
-                      <TableCell>{formatarMoeda(totalTicket)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-              {/* Ranking visual */}
-              <div className="mt-8 space-y-3">
-                {dadosFiltrados.map((item: any, idx: number) => {
-                  const percent = (item.balance.total / maiorFaturamento) * 100;
-                  return (
-                    <div key={item.id} className="flex items-center bg-card rounded-lg border p-3 shadow-sm">
-                      <div className="w-10 text-lg font-bold text-orange-500 text-center">{item.position}º</div>
-                      <div className="flex-1 ml-2">
-                        <div className="text-white font-medium">{nomesAmigaveis[item.company_name] || item.company_name}</div>
-                        <div className="relative h-7 mt-1 bg-muted rounded-full overflow-hidden flex items-center">
-                          <div
-                            className="absolute left-0 top-0 h-full rounded-full transition-all"
-                            style={{
-                              width: `${percent}%`,
-                              background: 'hsl(var(--primary))'
-                            }}
-                          />
-                          <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm font-bold text-primary-foreground drop-shadow">
-                            {formatarMoeda(item.balance.total)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()
-      )}
-    </div>
-  );
-}
-
 export default function FinanceiroPage() {
   const [transacoes, setTransacoes] = useState<Transacao[]>([])
   const [novaTransacao, setNovaTransacao] = useState<Partial<Transacao>>({
@@ -346,12 +178,19 @@ export default function FinanceiroPage() {
   const [mesAtual, setMesAtual] = useState(new Date())
   
   // Estados para controle de caixa
-  const [lojaSelecionada, setLojaSelecionada] = useState<string>('TOLEDO 01')
+  const [lojaSelecionada, setLojaSelecionada] = useState<string>('TOLEDO LAGO')
   const [dataInicial, setDataInicial] = useState<string>(new Date().toISOString().split('T')[0])
   const [dataFinal, setDataFinal] = useState<string>(new Date().toISOString().split('T')[0])
   const [dadosCaixa, setDadosCaixa] = useState<DadosCaixa | null>(null)
   const [carregandoCaixa, setCarregandoCaixa] = useState(false)
   const [logsApi, setLogsApi] = useState<string[]>([])
+
+  // Estados separados para o benchmark
+  const [lojaSelecionadaBenchmark, setLojaSelecionadaBenchmark] = useState<string>('TOLEDO LAGO')
+  const [dataInicialBenchmark, setDataInicialBenchmark] = useState<string>(new Date().toISOString().split('T')[0])
+  const [dataFinalBenchmark, setDataFinalBenchmark] = useState<string>(new Date().toISOString().split('T')[0])
+  const [dadosBenchmark, setDadosBenchmark] = useState<BenchmarkStore[]>([])
+  const [carregandoBenchmark, setCarregandoBenchmark] = useState(false)
 
   // Dados para gráficos
   const [dadosGraficoMensal, setDadosGraficoMensal] = useState<any[]>([])
@@ -361,14 +200,15 @@ export default function FinanceiroPage() {
   const loginUrl = process.env.NEXT_PUBLIC_API_LOGIN_URL as string
   const movimentacoesBaseUrl = process.env.NEXT_PUBLIC_API_MOVIMENTACOES_URL as string
   const historicoBaseUrl = process.env.NEXT_PUBLIC_API_HISTORICO_URL as string
+  const benchmarkBaseUrl = process.env.NEXT_PUBLIC_API_BENCHMARK_URL as string
   const credenciais = {
     username: process.env.NEXT_PUBLIC_API_USERNAME as string,
     password: process.env.NEXT_PUBLIC_API_PASSWORD as string
   }
 
   const lojas = {
-    "TOLEDO 01": 4,
-    "TOLEDO 02": 40,
+    "TOLEDO LAGO": 4,
+    "TOLEDO PIONEIRO": 40,
     "VIDEIRA": 184,
     "FRAIBURGO": 528,
     "CAMPO MOURÃO": 616
@@ -389,7 +229,7 @@ export default function FinanceiroPage() {
         body: JSON.stringify(credenciais)
       })
 
-      adicionarLog(` Status da resposta: ${response.status} ${response.statusText}`)
+      adicionarLog(`📊 Status da resposta: ${response.status} ${response.statusText}`)
 
       if (!response.ok) {
         throw new Error(`Erro no login: ${response.status}`)
@@ -439,7 +279,7 @@ export default function FinanceiroPage() {
       adicionarLog(`📅 Período: ${dataInicialFormatada} até ${dataFinalFormatada}`)
 
       // Buscar movimentações
-      const movimentacoesUrl = `${movimentacoesBaseUrl}/${lojaId}?data_inicial=${dataInicialFormatada}&data_final=${dataFinalFormatada}`
+      const movimentacoesUrl = `${movimentacoesBaseUrl}/${lojaId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}`
       adicionarLog(`🔍 Buscando movimentações: ${movimentacoesUrl}`)
       
       const movimentacoesResponse = await fetch(movimentacoesUrl, {
@@ -458,7 +298,7 @@ export default function FinanceiroPage() {
       adicionarLog(`📊 Total de movimentações: ${movimentacoesData.data?.length || 0}`)
 
       // Buscar histórico do caixa
-      const historicoUrl = `${historicoBaseUrl}/${lojaId}?data_inicial=${dataInicialFormatada}&data_final=${dataFinalFormatada}&withDeleted=true&all_sales=true`
+      const historicoUrl = `${historicoBaseUrl}/${lojaId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}&withDeleted=true&all_sales=true`
       adicionarLog(`🔍 Buscando histórico: ${historicoUrl}`)
       
       const historicoResponse = await fetch(historicoUrl, {
@@ -480,6 +320,7 @@ export default function FinanceiroPage() {
       if (historicoData.data && historicoData.data.length > 0) {
         historicoData.data.forEach((item: any, index: number) => {
           adicionarLog(`🔍 Histórico ${index + 1}:`)
+          adicionarLog(`  - Data: ${item.opened_at || 'N/A'}`)
           adicionarLog(`  - Usuário: ${item.opened_user?.full_name || 'N/A'}`)
           adicionarLog(`  - Total Sales: ${item.total_sales || 0}`)
           adicionarLog(`  - Amount on Cash: ${item.amount_on_cash || 0}`)
@@ -740,17 +581,22 @@ export default function FinanceiroPage() {
   const historicoFiltrado = dadosCaixa?.historico.filter(hist => {
     if (!hist.opened_at) return false;
     
-    // Formatar a data de abertura para dd/MM/yyyy
+    // Extrai só a parte da data (dd-MM-yyyy)
     const [dataPart] = hist.opened_at.split(" ");
-    const [ano, mes, dia] = dataPart.split("-");
-    const dataAberturaFormatada = `${dia}/${mes}/${ano}`;
+    const [dia, mes, ano] = dataPart.split("-");
     
-    // Formatar as datas do filtro para dd/MM/yyyy
-    const dataInicialFormatada = formatarDataParaApi(dataInicial);
-    const dataFinalFormatada = formatarDataParaApi(dataFinal);
+    // Cria data de abertura no formato yyyy-MM-dd
+    const dataAbertura = new Date(`${ano}-${mes}-${dia}`);
     
-    // Comparar as datas no formato dd/MM/yyyy
-    return dataAberturaFormatada >= dataInicialFormatada && dataAberturaFormatada <= dataFinalFormatada;
+    // Ajusta as datas do filtro para considerar o dia inteiro
+    const dataInicialFiltro = new Date(dataInicial);
+    dataInicialFiltro.setHours(0, 0, 0, 0);
+    
+    const dataFinalFiltro = new Date(dataFinal);
+    dataFinalFiltro.setHours(23, 59, 59, 999);
+    
+    // Compara as datas
+    return dataAbertura >= dataInicialFiltro && dataAbertura <= dataFinalFiltro;
   }) || [];
 
   function formatarNomeCompleto(nome?: string) {
@@ -764,6 +610,87 @@ export default function FinanceiroPage() {
   function formatarPrimeiroNome(nome?: string) {
     if (!nome) return '';
     return nome.trim().split(/\s+/)[0].charAt(0).toUpperCase() + nome.trim().split(/\s+/)[0].slice(1).toLowerCase();
+  }
+
+  const buscarDadosBenchmark = async () => {
+    setCarregandoBenchmark(true)
+    setLogsApi([])
+    
+    try {
+      adicionarLog('🔐 Iniciando processo de login...')
+      const token = await obterToken()
+      adicionarLog('✅ Token obtido com sucesso')
+      
+      const lojaId = lojas[lojaSelecionadaBenchmark as keyof typeof lojas]
+      if (!lojaId) {
+        throw new Error(`Loja "${lojaSelecionadaBenchmark}" não encontrada`)
+      }
+      adicionarLog(`🏪 Loja selecionada: ${lojaSelecionadaBenchmark} (ID: ${lojaId})`)
+
+      // Formatar datas para o formato da API (dd/MM/yyyy)
+      const dataInicialFormatada = formatarDataParaApi(dataInicialBenchmark);
+      const dataFinalFormatada = formatarDataParaApi(dataFinalBenchmark);
+      adicionarLog(`📅 Período: ${dataInicialFormatada} até ${dataFinalFormatada}`)
+
+      // Buscar dados do benchmark
+      const benchmarkUrl = `${benchmarkBaseUrl}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}&store_id=${lojaId}`
+      adicionarLog(`🔍 Buscando benchmark: ${benchmarkUrl}`)
+      
+      const response = await fetch(benchmarkUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        }
+      })
+
+      adicionarLog(`📊 Status da resposta: ${response.status} ${response.statusText}`)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        adicionarLog(`❌ Erro na resposta: ${errorText}`)
+        throw new Error(`Erro ao buscar benchmark: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      adicionarLog(`📥 Dados recebidos: ${JSON.stringify(data, null, 2)}`)
+
+      if (!data.content) {
+        throw new Error("Dados do benchmark não encontrados na resposta")
+      }
+
+      // Filtrar a loja vendida e recalcular as posições
+      const lojasFiltradas = data.content
+        .filter((store: BenchmarkStore) => store.company_name !== "carazinho - rs (vendida)")
+        .map((store: BenchmarkStore, index: number) => ({
+          ...store,
+          position: index + 1
+        }));
+
+      setDadosBenchmark(lojasFiltradas)
+      adicionarLog(`✅ Dados do benchmark carregados com sucesso! Total de lojas: ${lojasFiltradas.length}`)
+      toast.success('Dados carregados com sucesso!')
+    } catch (error) {
+      const errorMessage = (error as Error).message
+      adicionarLog(`❌ Erro: ${errorMessage}`)
+      console.error('Erro ao carregar dados:', error)
+      toast.error('Erro ao carregar dados: ' + errorMessage)
+    } finally {
+      setCarregandoBenchmark(false)
+    }
+  }
+
+  // Função para formatar nome da loja
+  function formatarNomeLoja(nome: string): string {
+    const nomesFormatados: { [key: string]: string } = {
+      "Toledo - PR 01 - JD. La Salle": "Toledo Lago",
+      "Toledo - PR 02 - Boa Esperança": "Toledo Pioneiro",
+      "campo mourão - pr": "Campo Mourão",
+      "fraiburgo - sc": "Fraiburgo",
+      "Videira - SC": "Videira"
+    }
+    return nomesFormatados[nome] || nome
   }
 
   return (
@@ -962,17 +889,13 @@ export default function FinanceiroPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="faturamento" className="space-y-4">
+        <Tabs defaultValue="dashboard" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="transacoes">Transações</TabsTrigger>
             <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+            <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="faturamento" className="space-y-4">
-            <BenchmarkAnalytics lojas={lojas} formatarDataParaApi={formatarDataParaApi} formatarMoeda={formatarMoeda} obterToken={obterToken} />
-          </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -1172,6 +1095,189 @@ export default function FinanceiroPage() {
                       </Button>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="faturamento" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Faturamento por Loja</CardTitle>
+                <CardDescription>
+                  Comparativo de faturamento entre as lojas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Filtros */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <Label htmlFor="lojaBenchmark">Loja</Label>
+                      <Select value={lojaSelecionadaBenchmark} onValueChange={setLojaSelecionadaBenchmark}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(lojas).map(loja => (
+                            <SelectItem key={loja} value={loja}>{loja}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="dataInicialBenchmark">Data Inicial</Label>
+                      <Input
+                        id="dataInicialBenchmark"
+                        type="date"
+                        value={dataInicialBenchmark}
+                        onChange={(e) => setDataInicialBenchmark(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="dataFinalBenchmark">Data Final</Label>
+                      <Input
+                        id="dataFinalBenchmark"
+                        type="date"
+                        value={dataFinalBenchmark}
+                        onChange={(e) => setDataFinalBenchmark(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="flex items-end">
+                      <Button 
+                        onClick={buscarDadosBenchmark}
+                        disabled={carregandoBenchmark}
+                        className="w-full"
+                      >
+                        {carregandoBenchmark ? (
+                          <>
+                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Carregando...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Consultar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Tabela de Faturamento */}
+                  {dadosBenchmark.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ranking</TableHead>
+                            <TableHead>Loja</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                            <TableHead className="text-right">Dinheiro</TableHead>
+                            <TableHead className="text-right">Crédito</TableHead>
+                            <TableHead className="text-right">Débito</TableHead>
+                            <TableHead className="text-right">PIX</TableHead>
+                            <TableHead className="text-right">Ticket</TableHead>
+                            <TableHead className="text-right">Online</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {dadosBenchmark.map((store) => (
+                            <TableRow key={store.id}>
+                              <TableCell className="font-medium">{store.position}º</TableCell>
+                              <TableCell>{formatarNomeLoja(store.company_name)}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold">
+                                {formatarMoeda(store.balance.total)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-green-600">
+                                {formatarMoeda(store.balance.money)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-purple-600">
+                                {formatarMoeda(store.balance.credit_card)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-orange-600">
+                                {formatarMoeda(store.balance.debit_card)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-cyan-600">
+                                {formatarMoeda(store.balance.pix)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-pink-600">
+                                {formatarMoeda(store.balance.ticket)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-blue-600">
+                                {formatarMoeda(store.balance.online)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {/* Linha de Total */}
+                          <TableRow className="bg-muted font-bold">
+                            <TableCell colSpan={2} className="text-right">Total</TableCell>
+                            <TableCell className="text-right font-mono font-semibold">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.total || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-green-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.money || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-purple-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.credit_card || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-orange-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.debit_card || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-cyan-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.pix || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-pink-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.ticket || 0), 0))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-blue-600">
+                              {formatarMoeda(dadosBenchmark.reduce((acc, s) => acc + (s.balance.online || 0), 0))}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {/* Ranking Visual Customizado */}
+                  {dadosBenchmark.length > 0 && (
+                    <div className="mt-8 space-y-3">
+                      {dadosBenchmark.slice(0, 5).map((item, idx) => {
+                        const percent = (item.balance.total / dadosBenchmark[0].balance.total) * 100;
+                        return (
+                          <div key={item.id} className="flex items-center bg-card rounded-lg border p-3 shadow-sm">
+                            {/* Ranking */}
+                            <div className="w-10 text-lg font-bold text-orange-500 text-center">{item.position}º</div>
+                            {/* Nome da loja e barra */}
+                            <div className="flex-1 ml-2">
+                              <div className="text-primary font-medium">{formatarNomeLoja(item.company_name)}</div>
+                              <div className="relative h-7 mt-1 bg-muted rounded-full overflow-hidden flex items-center">
+                                <div
+                                  className="absolute left-0 top-0 h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${percent}%`,
+                                    background: 'hsl(var(--primary))'
+                                  }}
+                                />
+                                <span className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm font-bold text-primary-foreground drop-shadow">
+                                  {formatarMoeda(item.balance.total)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {dadosBenchmark.length === 0 && !carregandoBenchmark && (
+                    <div className="text-center py-4 text-gray-500">
+                      Nenhum dado de faturamento encontrado. Selecione um período e clique em Consultar.
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1627,6 +1733,28 @@ export default function FinanceiroPage() {
                             </div>
                           )}
                         </div>
+                        <div className="mt-4 flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(logsApi.join('\n'))
+                              toast.success('Logs copiados para a área de transferência!')
+                            }}
+                          >
+                            📋 Copiar Logs
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setLogsApi([])
+                              toast.success('Logs limpos!')
+                            }}
+                          >
+                            🗑️ Limpar Logs
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   </TabsContent>
@@ -1636,6 +1764,7 @@ export default function FinanceiroPage() {
           </div>
         </DialogContent>
       </Dialog>
+
     </DashboardLayout>
   )
-}
+} 
