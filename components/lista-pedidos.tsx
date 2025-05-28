@@ -5,7 +5,11 @@ import Link from "next/link"
 import { type Pedido, getPedidos, arquivarPedido, desarquivarPedido, getSupabaseClient, deletePedido } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Home, Download, Printer, BarChart2, Trash2 } from "lucide-react"
+import { Search, Home, Download, Printer, BarChart2, Trash2, Eye } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 
 const getLojaName = (id: string) => {
   const lojas = {
@@ -35,6 +39,38 @@ export function ListaPedidos() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedLoja, setSelectedLoja] = useState("")
+  const [modalPedidosApiAberto, setModalPedidosApiAberto] = useState(false)
+  const [pedidosApi, setPedidosApi] = useState<any[]>([])
+  const [carregandoPedidosApi, setCarregandoPedidosApi] = useState(false)
+  const [erroPedidosApi, setErroPedidosApi] = useState<string | null>(null)
+  const [modalProdutosAberto, setModalProdutosAberto] = useState(false)
+  const [produtosPedido, setProdutosPedido] = useState<any[]>([])
+  const [pedidoSelecionado, setPedidoSelecionado] = useState<any>(null)
+  const [alertCsvOpen, setAlertCsvOpen] = useState(false)
+  const [csvPedidoId, setCsvPedidoId] = useState<string | null>(null)
+  const [csvPedidoVhsys, setCsvPedidoVhsys] = useState<string | null>(null)
+  const [csvLoading, setCsvLoading] = useState(false)
+  const [alertLimparOpen, setAlertLimparOpen] = useState(false)
+  const [limpandoPedidos, setLimpandoPedidos] = useState(false)
+  const [alertDeleteOpen, setAlertDeleteOpen] = useState(false)
+  const [pedidoParaExcluir, setPedidoParaExcluir] = useState<number | null>(null)
+  const [excluindoPedido, setExcluindoPedido] = useState(false)
+
+  // Filtros para o modal de pedidos API
+  const lojasApi = [
+    { id: 4, nome: "Toledo 01" },
+    { id: 40, nome: "Toledo 02" },
+    { id: 184, nome: "Videira" },
+    { id: 528, nome: "Fraiburgo" },
+    { id: 616, nome: "Campo Mourão" },
+  ]
+  const [lojaApi, setLojaApi] = useState(lojasApi[0].id.toString())
+  const [dataInicialApi, setDataInicialApi] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  })
+  const [dataFinalApi, setDataFinalApi] = useState(() => new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     const loja = localStorage.getItem("selectedLoja")
@@ -93,15 +129,60 @@ export function ListaPedidos() {
   }
 
   async function handleDelete(pedidoId: number) {
-    if (window.confirm("Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita!")) {
-      try {
-        await deletePedido(pedidoId)
-        await carregarPedidos()
-      } catch (error) {
-        console.error("Erro ao excluir pedido:", error)
-        alert("Erro ao excluir pedido. Por favor, tente novamente.")
-      }
+    setPedidoParaExcluir(pedidoId);
+    setAlertDeleteOpen(true);
+  }
+
+  // Função para obter token (igual ao financeiro)
+  async function obterTokenApi() {
+    const loginUrl = process.env.NEXT_PUBLIC_API_LOGIN_URL as string
+    const credenciais = {
+      username: process.env.NEXT_PUBLIC_API_USERNAME as string,
+      password: process.env.NEXT_PUBLIC_API_PASSWORD as string
     }
+    const response = await fetch(loginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(credenciais)
+    })
+    if (!response.ok) throw new Error("Erro ao obter token")
+    const data = await response.json()
+    if (!data.access_token) throw new Error("Token não encontrado na resposta")
+    return data.access_token
+  }
+
+  // Função para buscar pedidos da API externa
+  async function buscarPedidosApi() {
+    setCarregandoPedidosApi(true)
+    setErroPedidosApi(null)
+    try {
+      const token = await obterTokenApi()
+      // Formatar datas para dd/MM/yyyy
+      const formatarData = (data: string) => {
+        const [ano, mes, dia] = data.split('-');
+        return `${dia}/${mes}/${ano}`;
+      }
+      const url = `https://amatech-prd.azure-api.net/api/odin/orders?stores_ids=${lojaApi}&page=1&size=30&data_inicial=${formatarData(dataInicialApi)}&data_final=${formatarData(dataFinalApi)}`
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      if (!response.ok) throw new Error("Erro ao buscar pedidos da API")
+      const data = await response.json()
+      setPedidosApi(data.content || [])
+    } catch (err: any) {
+      setErroPedidosApi(err.message || "Erro desconhecido")
+    } finally {
+      setCarregandoPedidosApi(false)
+    }
+  }
+
+  // Função para deixar o nome do produto em Title Case
+  function titleCase(str: string) {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 
   return (
@@ -112,19 +193,255 @@ export function ListaPedidos() {
           <Link href="/relatorios" className="text-foreground hover:text-primary text-xl md:text-2xl" title="Ir para relatórios">
             <BarChart2 />
           </Link>
-          <button
-            onClick={async () => {
-              if (window.confirm("Tem certeza que deseja excluir TODOS os pedidos e históricos? Esta ação não pode ser desfeita!")) {
-                await limparPedidos();
-                alert("Pedidos e históricos excluídos com sucesso!");
-                window.location.reload();
-              }
-            }}
-            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-semibold"
-            title="Limpar todos os pedidos e históricos"
-          >
-            Limpar Pedidos
-          </button>
+          <Dialog open={modalPedidosApiAberto} onOpenChange={setModalPedidosApiAberto}>
+            <DialogTrigger asChild>
+              <Button variant="outline" onClick={buscarPedidosApi}>
+                <Eye className="mr-2 h-4 w-4" />
+                Pedidos API
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Pedidos da API Externa</DialogTitle>
+                <DialogDescription>
+                  Visualize os pedidos recebidos do sistema externo (vhsys).
+                </DialogDescription>
+              </DialogHeader>
+              {/* Filtros do modal */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <div>
+                  <label className="block text-xs mb-1">Loja</label>
+                  <Select value={lojaApi} onValueChange={setLojaApi}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lojasApi.map(loja => (
+                        <SelectItem key={loja.id} value={loja.id.toString()}>{loja.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">Data Inicial</label>
+                  <Input type="date" value={dataInicialApi} onChange={e => setDataInicialApi(e.target.value)} className="w-36" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">Data Final</label>
+                  <Input type="date" value={dataFinalApi} onChange={e => setDataFinalApi(e.target.value)} className="w-36" />
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={buscarPedidosApi} disabled={carregandoPedidosApi}>
+                    <Eye className="mr-2 h-4 w-4" /> Consultar
+                  </Button>
+                </div>
+              </div>
+              {carregandoPedidosApi ? (
+                <div className="text-center py-8">Carregando pedidos...</div>
+              ) : erroPedidosApi ? (
+                <div className="text-red-500 text-center py-4">{erroPedidosApi}</div>
+              ) : (
+                <div className="max-h-[400px] overflow-y-auto">
+                  {pedidosApi.length === 0 ? (
+                    <div className="text-muted-foreground text-center py-4">Nenhum pedido encontrado.</div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2"># Pedido (vhsys)</th>
+                          <th className="text-left py-2">Loja</th>
+                          <th className="text-left py-2">Data</th>
+                          <th className="text-right py-2">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedidosApi.map((pedido) => {
+                          // Data: pegar created_at e converter para dd/MM/aaaa
+                          let dataFormatada = "-";
+                          if (pedido.created_at) {
+                            const [dia, mes, ano] = pedido.created_at.split(" ")[0].split("-");
+                            dataFormatada = `${dia}/${mes}/${ano}`;
+                          }
+                          // Loja: store.company_name
+                          const loja = pedido.store?.company_name || "-";
+                          // Valor: invoices.f2_valfat (pode ser array ou objeto)
+                          let valor = "-";
+                          if (pedido.invoices) {
+                            let invoiceObj = Array.isArray(pedido.invoices) ? pedido.invoices[0] : pedido.invoices;
+                            if (invoiceObj && invoiceObj.f2_valfat) {
+                              valor = `R$ ${Number(invoiceObj.f2_valfat).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                            }
+                          }
+                          // Handler para abrir modal de produtos
+                          const abrirModalProdutos = () => {
+                            const produtos = Array.isArray(pedido.orderItems)
+                              ? pedido.orderItems.map((item: any) => ({
+                                  name: item.products?.name ? titleCase(item.products.name) : '-',
+                                  quantity: item.quantity || '-'
+                                }))
+                              : [];
+                            setProdutosPedido(produtos);
+                            setPedidoSelecionado(pedido);
+                            setModalProdutosAberto(true);
+                          }
+                          // Handler para abrir AlertDialog do CSV
+                          const abrirAlertCsv = () => {
+                            setCsvPedidoId(pedido.id.toString());
+                            setCsvPedidoVhsys(pedido.vhsys?.toString() || pedido.id.toString());
+                            setAlertCsvOpen(true);
+                          }
+                          // Handler para download do CSV
+                          const baixarCsvPedido = async () => {
+                            try {
+                              setCsvLoading(true);
+                              const token = await obterTokenApi();
+                              const url = `https://amatech-prd.azure-api.net/api/odin/orders/${pedido.id}/csv`;
+                              const response = await fetch(url, {
+                                headers: { "Authorization": `Bearer ${token}` }
+                              });
+                              if (!response.ok) throw new Error("Erro ao baixar CSV");
+                              const blob = await response.blob();
+                              const urlBlob = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = urlBlob;
+                              a.download = `pedido_${pedido.vhsys || pedido.id}.csv`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              window.URL.revokeObjectURL(urlBlob);
+                              toast.success('Download realizado com sucesso!');
+                            } catch (err) {
+                              toast.error("Erro ao baixar CSV do pedido");
+                            } finally {
+                              setCsvLoading(false);
+                              setAlertCsvOpen(false);
+                            }
+                          }
+                          // Handler para enviar CSV ao Drive
+                          const enviarCsvDrive = async () => {
+                            try {
+                              setCsvLoading(true);
+                              const token = await obterTokenApi();
+                              const url = `https://amatech-prd.azure-api.net/api/odin/orders/${pedido.id}/csv`;
+                              const response = await fetch(url, {
+                                headers: { "Authorization": `Bearer ${token}` }
+                              });
+                              if (!response.ok) throw new Error("Erro ao baixar CSV");
+                              const blob = await response.blob();
+                              const formData = new FormData();
+                              const nomeArquivo = `pedido_${pedido.vhsys || pedido.id}.csv`;
+                              formData.append('file', blob, nomeArquivo);
+                              formData.append('filename', `pedido_${pedido.vhsys || pedido.id}`);
+                              // Selecionar webhook conforme a loja
+                              let webhookUrl = '';
+                              const lojaNome = pedido.store?.company_name || '';
+                              if (lojaNome.includes('Toledo - PR 01')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_TOLEDO01 as string;
+                              else if (lojaNome.includes('Toledo - PR 02')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_TOLEDO02 as string;
+                              else if (lojaNome.toLowerCase().includes('videira')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_VIDEIRA as string;
+                              else if (lojaNome.toLowerCase().includes('fraiburgo')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_FRAIBURGO as string;
+                              else if (lojaNome.toLowerCase().includes('campo mourão') || lojaNome.toLowerCase().includes('campo mourao')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_CM as string;
+                              if (!webhookUrl) throw new Error('Webhook da loja não configurado!');
+                              // LOGS
+                              console.log('[Webhook CSV] Loja:', lojaNome);
+                              console.log('[Webhook CSV] Webhook URL:', webhookUrl);
+                              console.log('[Webhook CSV] Nome do arquivo:', nomeArquivo);
+                              const webhookResponse = await fetch(webhookUrl, {
+                                method: 'POST',
+                                body: formData
+                              });
+                              console.log('[Webhook CSV] Status:', webhookResponse.status, webhookResponse.statusText);
+                              if (!webhookResponse.ok) {
+                                const respText = await webhookResponse.text();
+                                console.error('[Webhook CSV] Corpo da resposta:', respText);
+                                throw new Error("Erro ao enviar CSV ao Drive");
+                              }
+                              toast.success('Arquivo enviado ao Drive com sucesso!');
+                            } catch (err) {
+                              console.error('[Webhook CSV] Exceção:', err);
+                              toast.error("Erro ao enviar CSV ao Drive");
+                            } finally {
+                              setCsvLoading(false);
+                              setAlertCsvOpen(false);
+                            }
+                          }
+                          return (
+                            <tr key={pedido.id} className="border-b">
+                              <td className="py-1 font-mono">
+                                <button className="text-blue-600 hover:underline" onClick={abrirModalProdutos} title="Ver produtos do pedido">
+                                  {pedido.vhsys}
+                                </button>
+                              </td>
+                              <td className="py-1">{loja}</td>
+                              <td className="py-1">{dataFormatada}</td>
+                              <td className="py-1 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <span>{valor}</span>
+                                  <AlertDialog open={alertCsvOpen && csvPedidoId === pedido.id.toString()} onOpenChange={setAlertCsvOpen}>
+                                    <AlertDialogTrigger asChild>
+                                      <button onClick={abrirAlertCsv} title="Baixar ou Enviar CSV do pedido" className="text-primary hover:text-primary-foreground">
+                                        <Download size={16} />
+                                      </button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Exportar Pedido</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          O que deseja fazer com o arquivo CSV do pedido <b>{pedido.vhsys}</b>?
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={csvLoading}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction disabled={csvLoading} onClick={baixarCsvPedido}>Download</AlertDialogAction>
+                                        <AlertDialogAction disabled={csvLoading} onClick={enviarCsvDrive}>Enviar ao Drive</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+          <AlertDialog open={alertLimparOpen} onOpenChange={setAlertLimparOpen}>
+            <AlertDialogTrigger asChild>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-semibold"
+                title="Limpar todos os pedidos e históricos"
+              >
+                Limpar Pedidos
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Tem certeza que deseja excluir TODOS os pedidos e históricos?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita!
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={limpandoPedidos}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={limpandoPedidos}
+                  onClick={async () => {
+                    setLimpandoPedidos(true);
+                    await limparPedidos();
+                    toast.success("Pedidos e históricos excluídos com sucesso!");
+                    setLimpandoPedidos(false);
+                    setAlertLimparOpen(false);
+                    window.location.reload();
+                  }}
+                >
+                  Excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -337,6 +654,72 @@ export function ListaPedidos() {
           </div>
         </>
       )}
+
+      {/* Modal de produtos do pedido */}
+      <Dialog open={modalProdutosAberto} onOpenChange={setModalProdutosAberto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Produtos do Pedido {pedidoSelecionado?.vhsys}</DialogTitle>
+            <DialogDescription>
+              Lista de produtos do pedido selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          {produtosPedido.length === 0 ? (
+            <div className="text-muted-foreground text-center py-4">Nenhum produto encontrado.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2">Produto</th>
+                  <th className="text-left py-2">Quantidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {produtosPedido.map((prod, idx) => (
+                  <tr key={idx} className="border-b">
+                    <td className="py-1">{prod.name}</td>
+                    <td className="py-1">{prod.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={alertDeleteOpen} onOpenChange={setAlertDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tem certeza que deseja excluir este pedido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita!
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoPedido}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluindoPedido}
+              onClick={async () => {
+                if (!pedidoParaExcluir) return;
+                setExcluindoPedido(true);
+                try {
+                  await deletePedido(pedidoParaExcluir);
+                  await carregarPedidos();
+                  toast.success("Pedido excluído com sucesso!");
+                } catch (error) {
+                  toast.error("Erro ao excluir pedido. Por favor, tente novamente.");
+                } finally {
+                  setExcluindoPedido(false);
+                  setAlertDeleteOpen(false);
+                  setPedidoParaExcluir(null);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
