@@ -26,7 +26,7 @@ export default function LoginPage() {
 
   const handleLojaSelect = (value: string) => {
     setSelectedLoja(value)
-    localStorage.setItem('selectedLoja', value)
+    localStorage.setItem('selectedStore', value)
     router.push('/')
   }
 

@@ -55,6 +55,7 @@ export function ListaPedidos() {
   const [alertDeleteOpen, setAlertDeleteOpen] = useState(false)
   const [pedidoParaExcluir, setPedidoParaExcluir] = useState<number | null>(null)
   const [excluindoPedido, setExcluindoPedido] = useState(false)
+  const [lojaApi, setLojaApi] = useState<string | undefined>(undefined)
 
   // Filtros para o modal de pedidos API
   const lojasApi = [
@@ -64,7 +65,44 @@ export function ListaPedidos() {
     { id: 528, nome: "Fraiburgo" },
     { id: 616, nome: "Campo Mourão" },
   ]
-  const [lojaApi, setLojaApi] = useState(lojasApi[0].id.toString())
+
+  // Função para normalizar o valor da loja
+  function normalizeLoja(loja: string | null) {
+    return loja?.toLowerCase().replace(/\s/g, '');
+  }
+
+  // Função para mapear selectedLoja para o ID da loja da API
+  function mapSelectedLojaToApiId(selectedLoja: string) {
+    console.log('mapSelectedLojaToApiId input:', { selectedLoja });
+    
+    if (!selectedLoja) {
+      console.log('No selectedLoja provided');
+      return undefined;
+    }
+
+    const normalized = selectedLoja
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '')
+      .replace(/-/g, '');
+    
+    console.log('mapSelectedLojaToApiId normalized:', { normalized });
+
+    const mapping: { [key: string]: string } = {
+      'toledo01': '4',
+      'toledo02': '40',
+      'videira': '184',
+      'fraiburgo': '528',
+      'campomourao': '616'
+    };
+
+    const apiId = mapping[normalized];
+    console.log('mapSelectedLojaToApiId result:', { apiId });
+    
+    return apiId;
+  }
+
   const [dataInicialApi, setDataInicialApi] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -73,15 +111,29 @@ export function ListaPedidos() {
   const [dataFinalApi, setDataFinalApi] = useState(() => new Date().toISOString().split('T')[0])
 
   useEffect(() => {
-    const loja = localStorage.getItem("selectedLoja")
+    const loja = localStorage.getItem('selectedStore');
+    console.log('Initial store selection:', { loja });
     if (loja) {
-      setSelectedLoja(loja)
+      setSelectedLoja(loja);
+      const apiId = mapSelectedLojaToApiId(loja);
+      console.log('Setting lojaApi:', { apiId });
+      setLojaApi(apiId);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    carregarPedidos()
-  }, [])
+    carregarPedidos();
+  }, []);
+
+  useEffect(() => {
+    if (lojaApi) {
+      buscarPedidosApi();
+    }
+  }, [lojaApi]);
+
+  useEffect(() => {
+    console.log('lojaApi:', lojaApi);
+  }, [lojaApi]);
 
   async function carregarPedidos() {
     try {
@@ -185,6 +237,43 @@ export function ListaPedidos() {
       .join(' ');
   }
 
+  // Função para verificar se um pedido já existe no sistema
+  function pedidoExisteNoSistema(numeroPedido: string | number | undefined): boolean {
+    if (!numeroPedido) return false;
+    const numeroStr = String(numeroPedido);
+    const todosPedidos = [
+      ...pedidos.aConferir,
+      ...pedidos.conferidos,
+      ...pedidos.pendentes,
+      ...pedidos.arquivados
+    ];
+    const existe = todosPedidos.some(p => String(p.numero) === numeroStr);
+    // Debug: mostrar no console as comparações
+    if (!existe) {
+      console.log('[DEBUG] Pedido NÃO conferido:', numeroStr, 'Comparando com:', todosPedidos.map(p => p.numero));
+    }
+    return existe;
+  }
+
+  // Função para retornar o status do pedido da API
+  function statusPedidoApi(numeroPedido: string | number | undefined): { label: string, color: string } {
+    if (!numeroPedido) return { label: 'Pendente de Cadastro', color: 'bg-red-100 text-red-800' };
+    const numeroStr = String(numeroPedido);
+    if (pedidos.conferidos.some(p => String(p.numero) === numeroStr)) {
+      return { label: 'Conferido', color: 'bg-green-100 text-green-800' };
+    }
+    if (pedidos.arquivados.some(p => String(p.numero) === numeroStr)) {
+      return { label: 'Arquivado', color: 'bg-gray-200 text-gray-800' };
+    }
+    if (pedidos.pendentes.some(p => String(p.numero) === numeroStr)) {
+      return { label: 'Com Pendências', color: 'bg-yellow-100 text-yellow-800' };
+    }
+    if (pedidos.aConferir.some(p => String(p.numero) === numeroStr)) {
+      return { label: 'A Conferir', color: 'bg-blue-100 text-blue-800' };
+    }
+    return { label: 'Pendente de Cadastro', color: 'bg-red-100 text-red-800' };
+  }
+
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
@@ -193,7 +282,13 @@ export function ListaPedidos() {
           <Link href="/relatorios" className="text-foreground hover:text-primary text-xl md:text-2xl" title="Ir para relatórios">
             <BarChart2 />
           </Link>
-          <Dialog open={modalPedidosApiAberto} onOpenChange={setModalPedidosApiAberto}>
+          <Dialog open={modalPedidosApiAberto} onOpenChange={(open) => {
+            setModalPedidosApiAberto(open);
+            if (open) {
+              const loja = localStorage.getItem('selectedStore');
+              if (loja) setLojaApi(mapSelectedLojaToApiId(loja));
+            }
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline" onClick={buscarPedidosApi}>
                 <Eye className="mr-2 h-4 w-4" />
@@ -209,19 +304,23 @@ export function ListaPedidos() {
               </DialogHeader>
               {/* Filtros do modal */}
               <div className="flex flex-wrap gap-2 mb-4">
-                <div>
-                  <label className="block text-xs mb-1">Loja</label>
-                  <Select value={lojaApi} onValueChange={setLojaApi}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {lojasApi.map(loja => (
-                        <SelectItem key={loja.id} value={loja.id.toString()}>{loja.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {lojaApi ? (
+                  <div>
+                    <label className="block text-xs mb-1">Loja</label>
+                    <Select value={lojaApi} onValueChange={setLojaApi}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lojasApi.map(loja => (
+                          <SelectItem key={loja.id} value={loja.id.toString()}>{loja.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>Carregando loja...</div>
+                )}
                 <div>
                   <label className="block text-xs mb-1">Data Inicial</label>
                   <Input type="date" value={dataInicialApi} onChange={e => setDataInicialApi(e.target.value)} className="w-36" />
@@ -272,6 +371,10 @@ export function ListaPedidos() {
                               valor = `R$ ${Number(invoiceObj.f2_valfat).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
                             }
                           }
+
+                          // Verificar se o pedido já existe no sistema (declarar apenas aqui)
+                          const pedidoJaExiste = pedidoExisteNoSistema(pedido.vhsys);
+
                           // Handler para abrir modal de produtos
                           const abrirModalProdutos = () => {
                             const produtos = Array.isArray(pedido.orderItems)
@@ -364,12 +467,21 @@ export function ListaPedidos() {
                               setAlertCsvOpen(false);
                             }
                           }
+
+                          // Status do pedido
+                          const status = statusPedidoApi(pedido.vhsys);
+
                           return (
                             <tr key={pedido.id} className="border-b">
                               <td className="py-1 font-mono">
-                                <button className="text-blue-600 hover:underline" onClick={abrirModalProdutos} title="Ver produtos do pedido">
-                                  {pedido.vhsys}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button className="text-blue-600 hover:underline" onClick={abrirModalProdutos} title="Ver produtos do pedido">
+                                    {pedido.vhsys}
+                                  </button>
+                                  <span className={`text-xs px-2 py-0.5 rounded ${status.color}`} title={status.label}>
+                                    {status.label}
+                                  </span>
+                                </div>
                               </td>
                               <td className="py-1">{loja}</td>
                               <td className="py-1">{dataFormatada}</td>
