@@ -7,6 +7,12 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { updateSupabaseCredentials, getPedidos, getSupabaseClient } from "@/lib/supabase"
 import { ThemeToggle } from "@/components/theme-toggle"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { 
   Home, 
   Package, 
@@ -208,7 +214,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Barra superior */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-[hsl(var(--header-background))]">
-        <div className="flex justify-between h-16 px-4">
+        <div className="flex justify-between h-16 px-4 md:px-6">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -218,26 +224,33 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             >
               {isMenuOpen ? <X /> : <Menu />}
             </Button>
-            <div className="hidden md:block w-64">
-              <Image
-                src="/NeoSystemsAI.png"
-                alt="NeoSystems Logo"
-                width={400}
-                height={80}
-                className="h-[3.5rem] w-auto"
-                priority
-              />
-            </div>
-            <div className="flex-1 max-w-[300px] md:max-w-none">
-              <div className="flex flex-col">
-                <h1 className="text-xs md:text-sm font-medium text-[hsl(var(--header-foreground))]/70 uppercase tracking-wider">
-                  Sistema de Gerenciamento de Lojas
-                </h1>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="h-px w-6 bg-gradient-to-r from-blue-500 to-purple-600"></div>
+            <div className="hidden md:flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center cursor-pointer">
+                        <span className="text-white font-bold text-lg">N</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>NeoSystemsAI</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-[hsl(var(--header-foreground))]/70">Unidade</span>
                   <span className="text-sm md:text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                     {selectedLoja ? getLojaName(selectedLoja) : "Carregando Loja..."}
                   </span>
+                </div>
+              </div>
+              <div className="flex flex-col md:ml-64">
+                <h1 className="text-sm md:text-base font-medium text-[hsl(var(--header-foreground))]/70 uppercase tracking-wider">
+                  Gerenciamento de Loja
+                </h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="h-px w-12 bg-gradient-to-r from-blue-500 to-purple-600"></div>
                 </div>
               </div>
             </div>
@@ -338,7 +351,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         {/* Conteúdo principal */}
         <main className="flex-1 md:ml-64 p-4 md:p-6 max-w-full overflow-x-auto bg-background">
-          <div className="container mx-auto">
+          <div className="container mx-auto px-2 md:px-4">
             {children}
           </div>
         </main>
