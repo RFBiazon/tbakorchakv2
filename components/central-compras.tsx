@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Camera, Upload, X, ZoomIn, ZoomOut, Save, Edit, Check, Trash2 } from "lucide-react"
+import { Camera, Upload, X, ZoomIn, ZoomOut, Save, Edit, Check, Trash2, AlertTriangle, ShoppingCart, CheckCircle, XCircle, Package2, BarChart3, TrendingUp, Clock } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase, ensureAuthenticated } from "@/lib/supabase"
+import { Badge } from "@/components/ui/badge"
+import { ensureAuthenticated, getSupabaseClient } from "@/lib/supabase"
 import { HistoricoCompras } from "./historico-compras"
 import { toast } from "sonner"
 import {
@@ -678,7 +679,7 @@ export function CentralCompras() {
       }
 
       // Obter a sessão atual
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await getSupabaseClient().auth.getSession()
       if (sessionError || !session) {
         console.error('Erro ao obter sessão:', sessionError)
         toast.error('Erro de autenticação. Por favor, faça login novamente.')
@@ -690,7 +691,7 @@ export function CentralCompras() {
 
       if (item.savedCompraId) {
         // Deletar todos os itens antigos da compra
-        const { error: deleteError, data: deleteData } = await supabase
+        const { error: deleteError, data: deleteData } = await getSupabaseClient()
           .from('itens_compra')
           .delete()
           .eq('compra_id', item.savedCompraId)
@@ -703,7 +704,7 @@ export function CentralCompras() {
           const quantidade = parseFloat(produto.Quantidade || '0');
           const valor_unitario = parseFloat(produto["Valor Unitário / KG"] || '0');
           const valor_total = parseFloat(produto["Valor Total"] || '0');
-          return supabase.from('itens_compra').insert({
+          return getSupabaseClient().from('itens_compra').insert({
             compra_id: item.savedCompraId,
             loja_id: userId,
             produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',
@@ -744,7 +745,7 @@ export function CentralCompras() {
           return acc + parseFloat(produto["Valor Total"] || "0")
         }, 0)
 
-        const { data: compraData, error: compraError } = await supabase
+        const { data: compraData, error: compraError } = await getSupabaseClient()
           .from('compras')
           .insert({
             loja_id: userId,
@@ -766,7 +767,7 @@ export function CentralCompras() {
           const quantidade = parseFloat(produto.Quantidade || '0');
           const valor_unitario = parseFloat(produto["Valor Unitário / KG"] || '0');
           const valor_total = parseFloat(produto["Valor Total"] || '0');
-          return supabase.from('itens_compra').insert({
+          return getSupabaseClient().from('itens_compra').insert({
             compra_id: compraData.id,
             loja_id: userId,
             produto: tipo === 'frutas' ? produto.Fruta : produto.Fruta || '',

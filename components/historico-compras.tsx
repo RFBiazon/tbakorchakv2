@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase, ensureAuthenticated, getSupabaseClient } from "@/lib/supabase"
+import { ensureAuthenticated, getSupabaseClient } from "@/lib/supabase"
 import {
   Table,
   TableBody,

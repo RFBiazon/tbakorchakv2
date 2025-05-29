@@ -1,0 +1,37 @@
+[
+  {
+    "idInterno": "toledo01",
+    "nomeExibicao": "Toledo 01",
+    "idApi": "4",
+    "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_TOLEDO01",
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO01"
+  },
+  {
+    "idInterno": "toledo02",
+    "nomeExibicao": "Toledo 02",
+    "idApi": "40",
+    "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_TOLEDO02",
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02"
+  },
+  {
+    "idInterno": "videira",
+    "nomeExibicao": "Videira",
+    "idApi": "184",
+    "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_VIDEIRA",
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_VIDEIRA"
+  },
+  {
+    "idInterno": "fraiburgo",
+    "nomeExibicao": "Fraiburgo",
+    "idApi": "528",
+    "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_FRAIBURGO",
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_FRAIBURGO"
+  },
+  {
+    "idInterno": "campomourao",
+    "nomeExibicao": "Campo Mourão",
+    "idApi": "616",
+    "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_CAMPOMOURAO",
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_CAMPOMOURAO"
+  }
+] 

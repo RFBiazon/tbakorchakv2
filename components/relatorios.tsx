@@ -7,16 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Home, Download, Printer } from "lucide-react"
+import lojasConfigData from '../lojas.config.json'; // Corrigido o caminho de importação
+import { DatePicker } from "./ui/date-picker"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 
-const getLojaName = (id: string) => {
-  const lojas = {
-    "toledo01": "Toledo 01",
-    "toledo02": "Toledo 02",
-    "videira": "Videira",
-    "fraiburgo": "Fraiburgo",
-    "campomourao": "Campo Mourão"
-  }
-  return lojas[id as keyof typeof lojas] || id
+// Definir uma interface para o objeto de configuração da loja
+interface LojaConfig {
+  idInterno: string;
+  nomeExibicao: string;
+  idApi: string;
+  supabaseUrlEnvVar: string;
+  supabaseKeyEnvVar: string;
+}
+const lojasConfig: LojaConfig[] = lojasConfigData;
+
+const getLojaName = (idInterno: string) => {
+  const loja = lojasConfig.find((l: LojaConfig) => l.idInterno === idInterno);
+  return loja ? loja.nomeExibicao : idInterno;
 }
 
 type Pendencia = {
@@ -255,20 +262,20 @@ export function Relatorios() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
           <div>
             <label className="block text-foreground font-medium mb-1 md:mb-2">Data Inicial</label>
-            <Input
-              type="date"
+            <DatePicker
               value={dataInicial}
-              onChange={(e) => setDataInicial(e.target.value)}
+              onChange={(value) => setDataInicial(value)}
               className="w-full bg-background text-foreground placeholder:text-muted-foreground"
+              placeholder="Selecione a data inicial"
             />
           </div>
           <div>
             <label className="block text-foreground font-medium mb-1 md:mb-2">Data Final</label>
-            <Input
-              type="date"
+            <DatePicker
               value={dataFinal}
-              onChange={(e) => setDataFinal(e.target.value)}
+              onChange={(value) => setDataFinal(value)}
               className="w-full bg-background text-foreground placeholder:text-muted-foreground"
+              placeholder="Selecione a data final"
             />
           </div>
           <div>

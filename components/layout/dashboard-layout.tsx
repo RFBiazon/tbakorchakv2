@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { supabase, updateSupabaseCredentials, getPedidos } from "@/lib/supabase"
+import { updateSupabaseCredentials, getPedidos, getSupabaseClient } from "@/lib/supabase"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { 
   Home, 
@@ -14,10 +14,41 @@ import {
   DollarSign,
   Menu,
   X,
-  ShoppingCart
+  ShoppingCart,
+  LogOut,
+  Settings,
+  BarChart3,
+  Users,
+  PackageSearch,
+  FileText,
+  CheckSquare,
+  Archive,
+  AlertTriangle,
+  Truck,
+  Building,
+  ChevronDown
 } from "lucide-react"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import lojasConfigData from '../../lojas.config.json';
 
-const menuItems = [
+interface LojaConfig {
+  idInterno: string;
+  nomeExibicao: string;
+  idApi: string;
+  supabaseUrlEnvVar: string;
+  supabaseKeyEnvVar: string;
+}
+
+interface MenuItem {
+  name: string;
+  href?: string;
+  icon: any;
+  submenu?: MenuItem[];
+}
+
+const lojasConfig: LojaConfig[] = lojasConfigData;
+
+const menuItems: MenuItem[] = [
   { 
     name: "Início", 
     href: "/dashboard", 
@@ -25,8 +56,19 @@ const menuItems = [
   },
   { 
     name: "Controle de Pedidos", 
-    href: "/pedidos", 
-    icon: Package 
+    icon: Package,
+    submenu: [
+      { 
+        name: "Amadelli", 
+        href: "/pedidos", 
+        icon: Package 
+      },
+      { 
+        name: "Demais Fornecedores", 
+        href: "/pedidos-fornecedores", 
+        icon: Package 
+      }
+    ]
   },
   { 
     name: "Controle de Estoques", 
@@ -35,8 +77,24 @@ const menuItems = [
   },
   { 
     name: "Controle Financeiro", 
-    href: "/financeiro", 
-    icon: DollarSign 
+    icon: DollarSign,
+    submenu: [
+      { 
+        name: "Dashboard", 
+        href: "/financeiro", 
+        icon: BarChart3 
+      },
+      { 
+        name: "Controle de Caixa", 
+        href: "/controle-caixa", 
+        icon: DollarSign 
+      },
+      { 
+        name: "Faturamento", 
+        href: "/faturamento", 
+        icon: FileText 
+      }
+    ]
   },
   { 
     name: "Central de Compras", 
@@ -52,7 +110,7 @@ interface DashboardStats {
   itensPendentes: number;
 }
 
-export function useStoreStats() {
+export function useDashboardStatsHook() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +155,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   
-  const { stats, loading } = useStoreStats()
+  const { stats, loading } = useDashboardStatsHook()
 
   useEffect(() => {
     checkSession()
@@ -133,7 +191,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut()
+      await getSupabaseClient().auth.signOut()
       localStorage.removeItem("selectedStore")
       router.push("/")
     } catch (error) {
@@ -141,19 +199,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const getLojaName = (id: string) => {
-    const lojas = {
-      "toledo01": "Toledo 01",
-      "toledo02": "Toledo 02",
-      "videira": "Videira",
-      "fraiburgo": "Fraiburgo",
-      "campomourao": "Campo Mourão"
-    }
-    return lojas[id as keyof typeof lojas] || id
+  const getLojaName = (idInterno: string) => {
+    const loja = lojasConfig.find((l: LojaConfig) => l.idInterno === idInterno);
+    return loja ? loja.nomeExibicao : idInterno;
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Barra superior */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-[hsl(var(--header-background))]">
         <div className="flex justify-between h-16 px-4">
@@ -176,10 +228,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 priority
               />
             </div>
-            <div className="max-w-[200px] md:max-w-none">
-              <h1 className="text-sm md:text-xl font-semibold text-[hsl(var(--header-foreground))] truncate">
-                Controle de Loja - {getLojaName(selectedLoja)}
-              </h1>
+            <div className="flex-1 max-w-[300px] md:max-w-none">
+              <div className="flex flex-col">
+                <h1 className="text-xs md:text-sm font-medium text-[hsl(var(--header-foreground))]/70 uppercase tracking-wider">
+                  Sistema de Gerenciamento de Lojas
+                </h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="h-px w-6 bg-gradient-to-r from-blue-500 to-purple-600"></div>
+                  <span className="text-sm md:text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    {selectedLoja ? getLojaName(selectedLoja) : "Carregando Loja..."}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -195,34 +255,82 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      <div className="flex pt-16">
+      <div className="flex pt-16 flex-1 pb-16">
         {/* Menu lateral */}
         <div className={`${
           isMenuOpen ? 'block' : 'hidden'
-        } md:block fixed top-16 left-0 bottom-0 w-64 bg-background border-r border-border overflow-y-auto`}>
+        } md:block fixed top-16 left-0 bottom-16 w-64 bg-background border-r border-border overflow-y-auto`}>
           <nav className="mt-5 px-2">
             <div className="space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      isActive
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
-                    }`}
-                  >
-                    <Icon
-                      className={`mr-3 h-5 w-5 ${
-                        isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                const hasSubmenu = item.submenu && item.submenu.length > 0
+                
+                // Verifica se algum item do submenu está ativo
+                const isSubmenuActive = hasSubmenu && item.submenu && item.submenu.some((subItem: MenuItem) => pathname === subItem.href)
+                const isActive = pathname === item.href || isSubmenuActive
+
+                if (hasSubmenu && item.submenu) {
+                  return (
+                    <div key={item.name}>
+                      <div className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                        isActive
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+                      }`}>
+                        <Icon
+                          className={`mr-3 h-5 w-5 ${
+                            isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                          }`}
+                        />
+                        {item.name}
+                      </div>
+                      <div className="ml-6 mt-1 space-y-1">
+                        {item.submenu.map((subItem: MenuItem) => {
+                          const SubIcon = subItem.icon
+                          const isSubActive = pathname === subItem.href
+                          return (
+                            <Link
+                              key={subItem.name}
+                              href={subItem.href || '#'}
+                              className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                                isSubActive
+                                  ? 'bg-accent text-accent-foreground'
+                                  : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`mr-3 h-4 w-4 ${
+                                  isSubActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                                }`}
+                              />
+                              {subItem.name}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                } else {
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href || '#'}
+                      className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                        isActive
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
                       }`}
-                    />
-                    {item.name}
-                  </Link>
-                )
+                    >
+                      <Icon
+                        className={`mr-3 h-5 w-5 ${
+                          isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                        }`}
+                      />
+                      {item.name}
+                    </Link>
+                  )
+                }
               })}
             </div>
           </nav>
@@ -235,6 +343,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+
+      {/* Rodapé Global Fixo */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900">
+        <div className="flex items-center justify-center min-h-[4rem] px-4 md:px-6">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="h-px w-6 md:w-8 bg-gradient-to-r from-blue-500 to-purple-600"></div>
+            <span className="text-sm md:text-base font-medium bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap">
+              © 2025 NeoSystemsAI
+            </span>
+            <span className="text-xs md:text-sm text-muted-foreground/80 whitespace-nowrap">
+              Todos os direitos reservados.
+            </span>
+            <div className="h-px w-6 md:w-8 bg-gradient-to-r from-purple-600 to-blue-500"></div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 } 

@@ -4,14 +4,15 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ThemeProvider } from 'next-themes'
+import lojasConfig from '../../lojas.config.json'; // Importar o arquivo de configuração
 
-const lojas = [
-  { id: 'toledo01', nome: 'Toledo 01' },
-  { id: 'toledo02', nome: 'Toledo 02' },
-  { id: 'videira', nome: 'Videira' },
-  { id: 'fraiburgo', nome: 'Fraiburgo' },
-  { id: 'campomourao', nome: 'Campo Mourão' }
-]
+interface LojaConfig {
+  idInterno: string;
+  nomeExibicao: string;
+  idApi: string;
+  supabaseUrlEnvVar: string;
+  supabaseKeyEnvVar: string;
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -26,7 +27,7 @@ export default function LoginPage() {
 
   const handleLojaSelect = (value: string) => {
     setSelectedLoja(value)
-    localStorage.setItem('selectedStore', value)
+    localStorage.setItem('selectedStore', value) // value aqui será o idInterno
     router.push('/')
   }
 
@@ -44,9 +45,9 @@ export default function LoginPage() {
                 <SelectValue placeholder="Selecione uma loja" />
               </SelectTrigger>
               <SelectContent>
-                {lojas.map((loja) => (
-                  <SelectItem key={loja.id} value={loja.id}>
-                    {loja.nome}
+                {(lojasConfig as LojaConfig[]).map((loja) => (
+                  <SelectItem key={loja.idInterno} value={loja.idInterno}>
+                    {loja.nomeExibicao}
                   </SelectItem>
                 ))}
               </SelectContent>

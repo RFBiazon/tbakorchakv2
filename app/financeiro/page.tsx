@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -36,7 +36,9 @@ import { ptBR } from "date-fns/locale"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ReferenceLine, Tooltip as RechartsTooltip } from "recharts"
 import { toast } from "sonner"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { DatePicker } from "@/components/ui/date-picker"
+import { useSelectedStore } from "@/hooks/useSelectedStore"
 
 interface Transacao {
   id: string
@@ -126,32 +128,11 @@ interface BenchmarkResponse {
 }
 
 const categorias = {
-  entrada: [
-    'Vendas',
-    'Receita de Serviços',
-    'Investimentos',
-    'Outros Recebimentos'
-  ],
-  saida: [
-    'Compra de Mercadorias',
-    'Salários',
-    'Aluguel',
-    'Utilities',
-    'Marketing',
-    'Transporte',
-    'Equipamentos',
-    'Outros Gastos'
-  ]
+  entrada: ['Vendas', 'Investimentos', 'Empréstimos', 'Outras Receitas'],
+  saida: ['Compra de Mercadorias', 'Salários', 'Aluguel', 'Utilities', 'Marketing', 'Outros Gastos']
 }
 
-const metodosPagamento = [
-  'Dinheiro',
-  'PIX',
-  'Cartão de Crédito',
-  'Cartão de Débito',
-  'Transferência Bancária',
-  'Boleto'
-]
+const metodosPagamento = ['Dinheiro', 'PIX', 'Cartão de Crédito', 'Cartão de Débito', 'Transferência Bancária', 'Cheque']
 
 const chartConfig = {
   entrada: {
@@ -165,6 +146,8 @@ const chartConfig = {
 }
 
 export default function FinanceiroPage() {
+  const { selectedStore, lojasConfig } = useSelectedStore()
+  
   const [transacoes, setTransacoes] = useState<Transacao[]>([])
   const [novaTransacao, setNovaTransacao] = useState<Partial<Transacao>>({
     tipo: 'entrada',
@@ -178,7 +161,7 @@ export default function FinanceiroPage() {
   const [mesAtual, setMesAtual] = useState(new Date())
   
   // Estados para controle de caixa
-  const [lojaSelecionada, setLojaSelecionada] = useState<string>('TOLEDO LAGO')
+  const [lojaSelecionada, setLojaSelecionada] = useState<string>('')
   const [dataInicial, setDataInicial] = useState<string>(new Date().toISOString().split('T')[0])
   const [dataFinal, setDataFinal] = useState<string>(new Date().toISOString().split('T')[0])
   const [dadosCaixa, setDadosCaixa] = useState<DadosCaixa | null>(null)
@@ -186,7 +169,7 @@ export default function FinanceiroPage() {
   const [logsApi, setLogsApi] = useState<string[]>([])
 
   // Estados separados para o benchmark
-  const [lojaSelecionadaBenchmark, setLojaSelecionadaBenchmark] = useState<string>('TOLEDO LAGO')
+  const [lojaSelecionadaBenchmark, setLojaSelecionadaBenchmark] = useState<string>('')
   const [dataInicialBenchmark, setDataInicialBenchmark] = useState<string>(new Date().toISOString().split('T')[0])
   const [dataFinalBenchmark, setDataFinalBenchmark] = useState<string>(new Date().toISOString().split('T')[0])
   const [dadosBenchmark, setDadosBenchmark] = useState<BenchmarkStore[]>([])
@@ -206,15 +189,14 @@ export default function FinanceiroPage() {
     password: process.env.NEXT_PUBLIC_API_PASSWORD as string
   }
 
-  const lojas = {
-    "TOLEDO LAGO": 4,
-    "TOLEDO PIONEIRO": 40,
-    "VIDEIRA": 184,
-    "FRAIBURGO": 528,
-    "CAMPO MOURÃO": 616
-  }
+  // Definir loja selecionada quando selectedStore estiver disponível
+  useEffect(() => {
+    if (selectedStore) {
+      setLojaSelecionada(selectedStore)
+      setLojaSelecionadaBenchmark(selectedStore)
+    }
+  }, [selectedStore])
 
-  // Função para fazer login e obter token
   const obterToken = async (): Promise<string> => {
     try {
       adicionarLog('🔑 Fazendo requisição de login...')
@@ -251,13 +233,11 @@ export default function FinanceiroPage() {
     }
   }
 
-  // Função para formatar data yyyy-MM-dd para dd/MM/yyyy (evita problemas de timezone)
   function formatarDataParaApi(data: string) {
     const [ano, mes, dia] = data.split('-');
     return `${dia}/${mes}/${ano}`;
   }
 
-  // Função para buscar movimentações do caixa
   const buscarMovimentacoesCaixa = async () => {
     setCarregandoCaixa(true)
     setLogsApi([]) // Limpar logs anteriores
@@ -267,11 +247,12 @@ export default function FinanceiroPage() {
       const token = await obterToken()
       adicionarLog('✅ Token obtido com sucesso')
       
-      const lojaId = lojas[lojaSelecionada as keyof typeof lojas]
-      if (!lojaId) {
-        throw new Error(`Loja "${lojaSelecionada}" não encontrada`)
+      const configLojaSelecionada = lojasConfig.find(l => l.idInterno === lojaSelecionada)
+      if (!configLojaSelecionada) {
+        throw new Error(`Configuração da loja "${lojaSelecionada}" não encontrada`)
       }
-      adicionarLog(`🏪 Loja selecionada: ${lojaSelecionada} (ID: ${lojaId})`)
+      const lojaApiId = configLojaSelecionada.idApi
+      adicionarLog(`🏪 Loja selecionada: ${configLojaSelecionada.nomeExibicao} (ID API: ${lojaApiId})`)
 
       // Formatar datas para o formato da API (dd/MM/yyyy)
       const dataInicialFormatada = formatarDataParaApi(dataInicial);
@@ -279,7 +260,7 @@ export default function FinanceiroPage() {
       adicionarLog(`📅 Período: ${dataInicialFormatada} até ${dataFinalFormatada}`)
 
       // Buscar movimentações
-      const movimentacoesUrl = `${movimentacoesBaseUrl}/${lojaId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}`
+      const movimentacoesUrl = `${movimentacoesBaseUrl}/${lojaApiId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}`
       adicionarLog(`🔍 Buscando movimentações: ${movimentacoesUrl}`)
       
       const movimentacoesResponse = await fetch(movimentacoesUrl, {
@@ -290,7 +271,9 @@ export default function FinanceiroPage() {
       })
 
       if (!movimentacoesResponse.ok) {
-        throw new Error(`Erro ao buscar movimentações: ${movimentacoesResponse.status}`)
+        const errorText = await movimentacoesResponse.text()
+        adicionarLog(`❌ Erro na resposta de movimentações: ${errorText}`)
+        throw new Error(`Erro ao buscar movimentações: ${movimentacoesResponse.status} - ${errorText}`)
       }
 
       const movimentacoesData = await movimentacoesResponse.json()
@@ -298,7 +281,7 @@ export default function FinanceiroPage() {
       adicionarLog(`📊 Total de movimentações: ${movimentacoesData.data?.length || 0}`)
 
       // Buscar histórico do caixa
-      const historicoUrl = `${historicoBaseUrl}/${lojaId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}&withDeleted=true&all_sales=true`
+      const historicoUrl = `${historicoBaseUrl}/${lojaApiId}?data_inicial=${encodeURIComponent(dataInicialFormatada)}&data_final=${encodeURIComponent(dataFinalFormatada)}&withDeleted=true&all_sales=true`
       adicionarLog(`🔍 Buscando histórico: ${historicoUrl}`)
       
       const historicoResponse = await fetch(historicoUrl, {
@@ -309,7 +292,9 @@ export default function FinanceiroPage() {
       })
 
       if (!historicoResponse.ok) {
-        throw new Error(`Erro ao buscar histórico: ${historicoResponse.status}`)
+        const errorText = await historicoResponse.text()
+        adicionarLog(`❌ Erro na resposta de histórico: ${errorText}`)
+        throw new Error(`Erro ao buscar histórico: ${historicoResponse.status} - ${errorText}`)
       }
 
       const historicoData = await historicoResponse.json()
@@ -348,7 +333,6 @@ export default function FinanceiroPage() {
     }
   }
 
-  // Função para formatar data e hora das movimentações
   const formatarDataHora = (created_at: string) => {
     const [rawDate, hora] = created_at.split(" ")
     let [a, b, c] = rawDate.split("-")
@@ -518,15 +502,13 @@ export default function FinanceiroPage() {
     }).format(valor)
   }
 
-  // Função para adicionar log
   const adicionarLog = (mensagem: string) => {
     const timestamp = new Date().toLocaleTimeString('pt-BR')
     const logComTimestamp = `[${timestamp}] ${mensagem}`
     console.log(logComTimestamp)
-    setLogsApi(prev => [logComTimestamp, ...prev].slice(0, 50)) // Manter apenas os 50 logs mais recentes
+    setLogsApi(prev => [logComTimestamp, ...prev].slice(0, 50))
   }
 
-  // Função para formatar nome do usuário: Apenas o primeiro nome, com inicial maiúscula
   function formatarNomeUsuario(nome?: string) {
     if (!nome) return 'Free';
     const partes = nome.trim().split(/\s+/)
@@ -534,15 +516,12 @@ export default function FinanceiroPage() {
     return primeiro[0].toUpperCase() + primeiro.slice(1).toLowerCase();
   }
 
-  // Função para formatar data dd/MM/aaaa a partir de 'dd-MM-yyyy HH:mm:ss' ou ISO
   function formatarDataBR(dataStr?: string) {
     if (!dataStr) return '';
-    // Tenta formato 'dd-MM-yyyy HH:mm:ss'
     const match = dataStr.match(/^(\d{2})-(\d{2})-(\d{4})/)
     if (match) {
       return `${match[1]}/${match[2]}/${match[3]}`;
     }
-    // Tenta ISO ou outros formatos
     const data = new Date(dataStr);
     if (!isNaN(data.getTime())) {
       return data.toLocaleDateString('pt-BR');
@@ -550,11 +529,9 @@ export default function FinanceiroPage() {
     return '';
   }
 
-  // Função para converter 'dd-MM-yyyy HH:mm:ss' para Date
   function parseDataAbertura(dataStr?: string) {
     if (!dataStr) return null;
     
-    // Tenta formato 'dd-MM-yyyy HH:mm:ss'
     const match = dataStr.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
     if (match) {
       const [, dia, mes, ano, hora = '00', minuto = '00', segundo = '00'] = match;
@@ -568,7 +545,6 @@ export default function FinanceiroPage() {
       );
     }
     
-    // Tenta ISO ou outros formatos
     const data = new Date(dataStr);
     if (!isNaN(data.getTime())) {
       return data;
@@ -577,25 +553,20 @@ export default function FinanceiroPage() {
     return null;
   }
 
-  // Ajustar datas para considerar apenas o dia (ignorando horas)
   const historicoFiltrado = dadosCaixa?.historico.filter(hist => {
     if (!hist.opened_at) return false;
     
-    // Extrai só a parte da data (dd-MM-yyyy)
     const [dataPart] = hist.opened_at.split(" ");
     const [dia, mes, ano] = dataPart.split("-");
     
-    // Cria data de abertura no formato yyyy-MM-dd
     const dataAbertura = new Date(`${ano}-${mes}-${dia}`);
     
-    // Ajusta as datas do filtro para considerar o dia inteiro
     const dataInicialFiltro = new Date(dataInicial);
     dataInicialFiltro.setHours(0, 0, 0, 0);
     
     const dataFinalFiltro = new Date(dataFinal);
     dataFinalFiltro.setHours(23, 59, 59, 999);
     
-    // Compara as datas
     return dataAbertura >= dataInicialFiltro && dataAbertura <= dataFinalFiltro;
   }) || [];
 
@@ -612,6 +583,15 @@ export default function FinanceiroPage() {
     return nome.trim().split(/\s+/)[0].charAt(0).toUpperCase() + nome.trim().split(/\s+/)[0].slice(1).toLowerCase();
   }
 
+  function formatarMotivo(motivo: string) {
+    return motivo
+      .replace(":", "")
+      .trim()
+      .split(' ')
+      .map(palavra => palavra.charAt(0).toUpperCase() + palavra.slice(1).toLowerCase())
+      .join(' ');
+  }
+
   const buscarDadosBenchmark = async () => {
     setCarregandoBenchmark(true)
     setLogsApi([])
@@ -621,11 +601,11 @@ export default function FinanceiroPage() {
       const token = await obterToken()
       adicionarLog('✅ Token obtido com sucesso')
       
-      const lojaId = lojas[lojaSelecionadaBenchmark as keyof typeof lojas]
+      const lojaId = lojasConfig.find(l => l.idInterno === lojaSelecionadaBenchmark)?.idApi
       if (!lojaId) {
         throw new Error(`Loja "${lojaSelecionadaBenchmark}" não encontrada`)
       }
-      adicionarLog(`🏪 Loja selecionada: ${lojaSelecionadaBenchmark} (ID: ${lojaId})`)
+      adicionarLog(`🏪 Loja selecionada: ${lojaSelecionadaBenchmark} (ID API: ${lojaId})`)
 
       // Formatar datas para o formato da API (dd/MM/yyyy)
       const dataInicialFormatada = formatarDataParaApi(dataInicialBenchmark);
@@ -665,6 +645,7 @@ export default function FinanceiroPage() {
         .filter((store: BenchmarkStore) => store.company_name !== "carazinho - rs (vendida)")
         .map((store: BenchmarkStore, index: number) => ({
           ...store,
+          company_name: formatarNomeLojaApiParaExibicao(store.company_name),
           position: index + 1
         }));
 
@@ -681,23 +662,20 @@ export default function FinanceiroPage() {
     }
   }
 
-  // Função para formatar nome da loja
-  function formatarNomeLoja(nome: string): string {
-    const nomesFormatados: { [key: string]: string } = {
-      "Toledo - PR 01 - JD. La Salle": "Toledo Lago",
-      "Toledo - PR 02 - Boa Esperança": "Toledo Pioneiro",
-      "campo mourão - pr": "Campo Mourão",
-      "fraiburgo - sc": "Fraiburgo",
-      "Videira - SC": "Videira"
-    }
-    return nomesFormatados[nome] || nome
+  function formatarNomeLojaApiParaExibicao(nomeApi: string): string {
+    const nomeApiNormalizado = nomeApi.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+    const lojaEncontrada = lojasConfig.find(l => {
+        const nomeExibicaoNormalizado = l.nomeExibicao.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+        return nomeExibicaoNormalizado === nomeApiNormalizado || l.idInterno === nomeApiNormalizado;
+    });
+    return lojaEncontrada ? lojaEncontrada.nomeExibicao : nomeApi;
   }
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Controle Financeiro</h1>
+        <h1 className="text-3xl font-bold">💵 Controle Financeiro</h1>
           <div className="flex gap-2">
             <Dialog open={modalAberto} onOpenChange={setModalAberto}>
               <DialogTrigger asChild>
@@ -811,7 +789,6 @@ export default function FinanceiroPage() {
           </div>
         </div>
 
-        {/* Cards de Estatísticas */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1110,7 +1087,6 @@ export default function FinanceiroPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {/* Filtros */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <Label htmlFor="lojaBenchmark">Loja</Label>
@@ -1119,8 +1095,8 @@ export default function FinanceiroPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.keys(lojas).map(loja => (
-                            <SelectItem key={loja} value={loja}>{loja}</SelectItem>
+                          {lojasConfig.map(loja => (
+                            <SelectItem key={loja.idInterno} value={loja.idInterno}>{loja.nomeExibicao}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1128,21 +1104,21 @@ export default function FinanceiroPage() {
                     
                     <div>
                       <Label htmlFor="dataInicialBenchmark">Data Inicial</Label>
-                      <Input
+                      <DatePicker
                         id="dataInicialBenchmark"
-                        type="date"
                         value={dataInicialBenchmark}
-                        onChange={(e) => setDataInicialBenchmark(e.target.value)}
+                        onChange={(value) => setDataInicialBenchmark(value)}
+                        placeholder="Selecione a data inicial"
                       />
                     </div>
                     
                     <div>
                       <Label htmlFor="dataFinalBenchmark">Data Final</Label>
-                      <Input
+                      <DatePicker
                         id="dataFinalBenchmark"
-                        type="date"
                         value={dataFinalBenchmark}
-                        onChange={(e) => setDataFinalBenchmark(e.target.value)}
+                        onChange={(value) => setDataFinalBenchmark(value)}
+                        placeholder="Selecione a data final"
                       />
                     </div>
                     
@@ -1167,7 +1143,6 @@ export default function FinanceiroPage() {
                     </div>
                   </div>
 
-                  {/* Tabela de Faturamento */}
                   {dadosBenchmark.length > 0 && (
                     <div className="overflow-x-auto">
                       <Table>
@@ -1188,7 +1163,7 @@ export default function FinanceiroPage() {
                           {dadosBenchmark.map((store) => (
                             <TableRow key={store.id}>
                               <TableCell className="font-medium">{store.position}º</TableCell>
-                              <TableCell>{formatarNomeLoja(store.company_name)}</TableCell>
+                              <TableCell>{store.company_name}</TableCell>
                               <TableCell className="text-right font-mono font-semibold">
                                 {formatarMoeda(store.balance.total)}
                               </TableCell>
@@ -1212,7 +1187,6 @@ export default function FinanceiroPage() {
                               </TableCell>
                             </TableRow>
                           ))}
-                          {/* Linha de Total */}
                           <TableRow className="bg-muted font-bold">
                             <TableCell colSpan={2} className="text-right">Total</TableCell>
                             <TableCell className="text-right font-mono font-semibold">
@@ -1242,18 +1216,15 @@ export default function FinanceiroPage() {
                     </div>
                   )}
 
-                  {/* Ranking Visual Customizado */}
                   {dadosBenchmark.length > 0 && (
                     <div className="mt-8 space-y-3">
                       {dadosBenchmark.slice(0, 5).map((item, idx) => {
                         const percent = (item.balance.total / dadosBenchmark[0].balance.total) * 100;
                         return (
                           <div key={item.id} className="flex items-center bg-card rounded-lg border p-3 shadow-sm">
-                            {/* Ranking */}
                             <div className="w-10 text-lg font-bold text-orange-500 text-center">{item.position}º</div>
-                            {/* Nome da loja e barra */}
                             <div className="flex-1 ml-2">
-                              <div className="text-primary font-medium">{formatarNomeLoja(item.company_name)}</div>
+                              <div className="text-primary font-medium">{item.company_name}</div>
                               <div className="relative h-7 mt-1 bg-muted rounded-full overflow-hidden flex items-center">
                                 <div
                                   className="absolute left-0 top-0 h-full rounded-full transition-all"
@@ -1285,7 +1256,6 @@ export default function FinanceiroPage() {
         </Tabs>
       </div>
 
-      {/* Modal Controle de Caixa */}
       <Dialog open={modalCaixaAberto} onOpenChange={setModalCaixaAberto}>
         <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1296,7 +1266,6 @@ export default function FinanceiroPage() {
           </DialogHeader>
           
           <div className="space-y-4">
-            {/* Filtros */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="loja">Loja</Label>
@@ -1305,8 +1274,8 @@ export default function FinanceiroPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.keys(lojas).map(loja => (
-                      <SelectItem key={loja} value={loja}>{loja}</SelectItem>
+                    {lojasConfig.map(loja => (
+                      <SelectItem key={loja.idInterno} value={loja.idInterno}>{loja.nomeExibicao}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1314,21 +1283,21 @@ export default function FinanceiroPage() {
               
               <div>
                 <Label htmlFor="dataInicial">Data Inicial</Label>
-                <Input
+                <DatePicker
                   id="dataInicial"
-                  type="date"
                   value={dataInicial}
-                  onChange={(e) => setDataInicial(e.target.value)}
+                  onChange={(value) => setDataInicial(value)}
+                  placeholder="Selecione a data inicial"
                 />
               </div>
               
               <div>
                 <Label htmlFor="dataFinal">Data Final</Label>
-                <Input
+                <DatePicker
                   id="dataFinal"
-                  type="date"
                   value={dataFinal}
-                  onChange={(e) => setDataFinal(e.target.value)}
+                  onChange={(value) => setDataFinal(value)}
+                  placeholder="Selecione a data final"
                 />
               </div>
               
@@ -1353,10 +1322,8 @@ export default function FinanceiroPage() {
               </div>
             </div>
 
-            {/* Dados do Caixa */}
             {dadosCaixa && (
               <div className="space-y-4">
-                {/* Resumo Geral do Faturamento */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Resumo do Faturamento</CardTitle>
@@ -1442,7 +1409,6 @@ export default function FinanceiroPage() {
                   </CardContent>
                 </Card>
 
-                {/* Tabelas de Dados */}
                 <Tabs defaultValue="movimentacoes" className="space-y-4">
                   <TabsList>
                     <TabsTrigger value="movimentacoes">Movimentações do Caixa</TabsTrigger>
@@ -1492,7 +1458,7 @@ export default function FinanceiroPage() {
                                   }`}>
                                     {mov.type === 1 ? '-' : '+'}{formatarMoeda(mov.amount)}
                                   </TableCell>
-                                  <TableCell>{mov.reason.replace(":", "").trim()}</TableCell>
+                                  <TableCell>{formatarMotivo(mov.reason)}</TableCell>
                                   <TableCell className="text-center">
                                     <Badge variant={mov.verified ? 'default' : 'secondary'}>
                                       {mov.verified ? 'Sim' : 'Não'}
@@ -1544,13 +1510,11 @@ export default function FinanceiroPage() {
                             </TableHeader>
                             <TableBody>
                               {(() => {
-                                // Ordenar por data de abertura (caso necessário)
                                 const historicoOrdenado = [...historicoFiltrado].sort((a, b) => {
                                   const dataA = parseDataAbertura(a.opened_at)?.getTime() || 0;
                                   const dataB = parseDataAbertura(b.opened_at)?.getTime() || 0;
                                   return dataA - dataB;
                                 });
-                                // PRÉ-PROCESSAMENTO: identificar vínculos entre fechamentos e aberturas
                                 const idsFechamentosUsados: number[] = [];
                                 const idsAberturasVinculadas: number[] = [];
                                 historicoOrdenado.forEach((hist, idx) => {
@@ -1566,7 +1530,6 @@ export default function FinanceiroPage() {
                                     }
                                   }
                                 });
-                                // RENDERIZAÇÃO
                                 return historicoOrdenado.map((hist, idx) => {
                                   const valorAberturaCorresponde = idsAberturasVinculadas.includes(hist.id);
                                   return (

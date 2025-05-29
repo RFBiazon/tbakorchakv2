@@ -10,16 +10,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
+import lojasConfigData from '../lojas.config.json';
+import { DatePicker } from "./ui/date-picker"
+import { Badge } from "./ui/badge"
 
-const getLojaName = (id: string) => {
-  const lojas = {
-    "toledo01": "Toledo 01",
-    "toledo02": "Toledo 02",
-    "videira": "Videira",
-    "fraiburgo": "Fraiburgo",
-    "campomourao": "Campo Mourão"
-  }
-  return lojas[id as keyof typeof lojas] || id
+// Definir uma interface para o objeto de configuração da loja
+interface LojaConfig {
+  idInterno: string;
+  nomeExibicao: string;
+  idApi: string;
+  supabaseUrlEnvVar: string;
+  supabaseKeyEnvVar: string;
+}
+
+// Tipar o array importado
+const lojasConfig: LojaConfig[] = lojasConfigData;
+
+const getLojaName = (idInterno: string) => {
+  const loja = lojasConfig.find((loja: LojaConfig) => loja.idInterno === idInterno);
+  return loja ? loja.nomeExibicao : idInterno;
 }
 
 export function ListaPedidos() {
@@ -58,13 +67,7 @@ export function ListaPedidos() {
   const [lojaApi, setLojaApi] = useState<string | undefined>(undefined)
 
   // Filtros para o modal de pedidos API
-  const lojasApi = [
-    { id: 4, nome: "Toledo 01" },
-    { id: 40, nome: "Toledo 02" },
-    { id: 184, nome: "Videira" },
-    { id: 528, nome: "Fraiburgo" },
-    { id: 616, nome: "Campo Mourão" },
-  ]
+  const lojasApi = lojasConfig.map((loja: LojaConfig) => ({ id: parseInt(loja.idApi), nome: loja.nomeExibicao }));
 
   // Função para normalizar o valor da loja
   function normalizeLoja(loja: string | null) {
@@ -72,35 +75,23 @@ export function ListaPedidos() {
   }
 
   // Função para mapear selectedLoja para o ID da loja da API
-  function mapSelectedLojaToApiId(selectedLoja: string) {
-    console.log('mapSelectedLojaToApiId input:', { selectedLoja });
+  function mapSelectedLojaToApiId(selectedLojaIdInterno: string) {
+    console.log('mapSelectedLojaToApiId input:', { selectedLojaIdInterno });
     
-    if (!selectedLoja) {
-      console.log('No selectedLoja provided');
+    if (!selectedLojaIdInterno) {
+      console.log('No selectedLojaIdInterno provided');
       return undefined;
     }
 
-    const normalized = selectedLoja
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '')
-      .replace(/-/g, '');
+    const lojaConfig = lojasConfig.find((loja: LojaConfig) => loja.idInterno === selectedLojaIdInterno);
     
-    console.log('mapSelectedLojaToApiId normalized:', { normalized });
-
-    const mapping: { [key: string]: string } = {
-      'toledo01': '4',
-      'toledo02': '40',
-      'videira': '184',
-      'fraiburgo': '528',
-      'campomourao': '616'
-    };
-
-    const apiId = mapping[normalized];
-    console.log('mapSelectedLojaToApiId result:', { apiId });
-    
-    return apiId;
+    if (lojaConfig) {
+      console.log('mapSelectedLojaToApiId result:', { apiId: lojaConfig.idApi });
+      return lojaConfig.idApi;
+    } else {
+      console.log('mapSelectedLojaToApiId: Loja não encontrada no config para:', selectedLojaIdInterno);
+      return undefined;
+    }
   }
 
   const [dataInicialApi, setDataInicialApi] = useState(() => {
@@ -323,11 +314,21 @@ export function ListaPedidos() {
                 )}
                 <div>
                   <label className="block text-xs mb-1">Data Inicial</label>
-                  <Input type="date" value={dataInicialApi} onChange={e => setDataInicialApi(e.target.value)} className="w-36" />
+                  <DatePicker 
+                    value={dataInicialApi} 
+                    onChange={(value) => setDataInicialApi(value)} 
+                    className="w-36"
+                    placeholder="Data inicial"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs mb-1">Data Final</label>
-                  <Input type="date" value={dataFinalApi} onChange={e => setDataFinalApi(e.target.value)} className="w-36" />
+                  <DatePicker 
+                    value={dataFinalApi} 
+                    onChange={(value) => setDataFinalApi(value)} 
+                    className="w-36"
+                    placeholder="Data final"
+                  />
                 </div>
                 <div className="flex items-end">
                   <Button onClick={buscarPedidosApi} disabled={carregandoPedidosApi}>
