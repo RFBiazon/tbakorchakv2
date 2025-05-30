@@ -345,7 +345,6 @@ export default function ControleCaixaPage() {
             <div>
               <Label htmlFor="dataInicial">Data Inicial</Label>
               <DatePicker
-                id="dataInicial"
                 value={dataInicial}
                 onChange={(value) => setDataInicial(value)}
                 placeholder="Selecione a data inicial"
@@ -355,7 +354,6 @@ export default function ControleCaixaPage() {
             <div>
               <Label htmlFor="dataFinal">Data Final</Label>
               <DatePicker
-                id="dataFinal"
                 value={dataFinal}
                 onChange={(value) => setDataFinal(value)}
                 placeholder="Selecione a data final"
@@ -553,20 +551,20 @@ export default function ControleCaixaPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Data</TableHead>
-                              <TableHead>Usuário</TableHead>
-                              <TableHead className="text-right">Caixa</TableHead>
-                              <TableHead className="text-right">Abertura</TableHead>
-                              <TableHead className="text-right">Saídas</TableHead>
-                              <TableHead className="text-right">Entradas</TableHead>
-                              <TableHead className="text-right">Fechamento</TableHead>
-                              <TableHead className="text-right">Faturamento</TableHead>
-                              <TableHead className="text-right">Dinheiro</TableHead>
-                              <TableHead className="text-right">Crédito</TableHead>
-                              <TableHead className="text-right">Débito</TableHead>
-                              <TableHead className="text-right">PIX</TableHead>
-                              <TableHead className="text-right">Ticket</TableHead>
-                              <TableHead className="text-right">Resultado</TableHead>
+                              <TableHead className="min-w-[100px]">Data</TableHead>
+                              <TableHead className="min-w-[120px]">Usuário</TableHead>
+                              <TableHead className="min-w-[80px] text-right">Caixa</TableHead>
+                              <TableHead className="min-w-[120px] text-right">Abertura</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Saídas</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Entradas</TableHead>
+                              <TableHead className="min-w-[120px] text-right">Fechamento</TableHead>
+                              <TableHead className="min-w-[120px] text-right">Faturamento</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Dinheiro</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Crédito</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Débito</TableHead>
+                              <TableHead className="min-w-[100px] text-right">PIX</TableHead>
+                              <TableHead className="min-w-[100px] text-right">Ticket</TableHead>
+                              <TableHead className="min-w-[120px] text-right">Resultado</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -600,9 +598,9 @@ export default function ControleCaixaPage() {
                                     </TableCell>
                                     <TableCell className="font-medium text-gray-600">
                                       <TooltipProvider>
-                                        <Tooltip>
+                                        <Tooltip delayDuration={0}>
                                           <TooltipTrigger asChild>
-                                            <span style={{ cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: 120 }}>
+                                            <span className="block truncate max-w-[100px]">
                                               {formatarPrimeiroNome(hist.opened_user?.full_name)}
                                             </span>
                                           </TooltipTrigger>
@@ -618,7 +616,7 @@ export default function ControleCaixaPage() {
                                     <TableCell className="text-right font-mono font-semibold">
                                       {formatarMoeda(Number(hist.amount_on_open) || 0)}
                                       <TooltipProvider>
-                                        <Tooltip>
+                                        <Tooltip delayDuration={0}>
                                           <TooltipTrigger asChild>
                                             {valorAberturaCorresponde ? (
                                               <span className="inline-block ml-2 text-blue-400 text-lg align-middle" style={{ cursor: 'pointer' }}>
@@ -647,7 +645,7 @@ export default function ControleCaixaPage() {
                                     <TableCell className="text-right font-mono text-white font-semibold">
                                       {formatarMoeda(Number(hist.amount_on_close) || 0)}
                                       <TooltipProvider>
-                                        <Tooltip>
+                                        <Tooltip delayDuration={0}>
                                           <TooltipTrigger asChild>
                                             {idsFechamentosUsados.includes(hist.id) ? (
                                               <span className="inline-block ml-2 text-blue-400 text-lg align-middle" style={{ cursor: 'pointer' }}>
@@ -692,10 +690,10 @@ export default function ControleCaixaPage() {
                                     </TableCell>
                                     <TableCell className={`text-right font-mono font-semibold ${Number(hist.result_cash) >= 0 ? 'text-green-600' : 'text-red-600'}`}> 
                                       <TooltipProvider>
-                                        <Tooltip>
+                                        <Tooltip delayDuration={0}>
                                           <TooltipTrigger asChild>
                                             <span
-                                              style={{ cursor: 'pointer', borderBottom: '1px dotted #888' }}
+                                              className="cursor-pointer border-b border-dotted border-gray-400"
                                             >
                                               {Number(hist.result_cash) >= 0 ? '+' : ''}{formatarMoeda(Number(hist.result_cash) || 0)}
                                             </span>

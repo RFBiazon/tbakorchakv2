@@ -133,6 +133,11 @@ export default function FaturamentoPage() {
     return lojaEncontrada ? lojaEncontrada.nomeExibicao : nomeApi;
   }
 
+  function getNomeLojaPorId(id: number): string {
+    const loja = lojasConfig.find(l => String(l.idApi) === String(id));
+    return loja ? loja.nomeExibicao : 'Loja não encontrada';
+  }
+
   // Função para buscar dados de benchmark
   const buscarDadosBenchmark = async () => {
     setCarregandoBenchmark(true)
@@ -238,7 +243,6 @@ export default function FaturamentoPage() {
                 <div>
                   <Label htmlFor="dataInicialBenchmark">Data Inicial</Label>
                   <DatePicker
-                    id="dataInicialBenchmark"
                     value={dataInicialBenchmark}
                     onChange={(value) => setDataInicialBenchmark(value)}
                     placeholder="Selecione a data inicial"
@@ -248,7 +252,6 @@ export default function FaturamentoPage() {
                 <div>
                   <Label htmlFor="dataFinalBenchmark">Data Final</Label>
                   <DatePicker
-                    id="dataFinalBenchmark"
                     value={dataFinalBenchmark}
                     onChange={(value) => setDataFinalBenchmark(value)}
                     placeholder="Selecione a data final"
@@ -296,7 +299,7 @@ export default function FaturamentoPage() {
                       {dadosBenchmark.map((store) => (
                         <TableRow key={store.id}>
                           <TableCell className="font-medium">{store.position}º</TableCell>
-                          <TableCell>{store.company_name}</TableCell>
+                          <TableCell>{getNomeLojaPorId(store.id)}</TableCell>
                           <TableCell className="text-right font-mono font-semibold">
                             {formatarMoeda(store.balance.total)}
                           </TableCell>
@@ -358,7 +361,7 @@ export default function FaturamentoPage() {
                       <div key={item.id} className="flex items-center bg-card rounded-lg border p-3 shadow-sm">
                         <div className="w-10 text-lg font-bold text-orange-500 text-center">{item.position}º</div>
                         <div className="flex-1 ml-2">
-                          <div className="text-primary font-medium">{item.company_name}</div>
+                          <div className="text-primary font-medium">{getNomeLojaPorId(item.id)}</div>
                           <div className="relative h-7 mt-1 bg-muted rounded-full overflow-hidden flex items-center">
                             <div
                               className="absolute left-0 top-0 h-full rounded-full transition-all"

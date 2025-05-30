@@ -459,7 +459,7 @@ export function ListaPedidos() {
                                 console.error('[Webhook CSV] Corpo da resposta:', respText);
                                 throw new Error("Erro ao enviar CSV ao Drive");
                               }
-                              toast.success('Arquivo enviado ao Drive com sucesso!');
+                              toast.success('Pedido cadastrado com sucesso!');
                             } catch (err) {
                               console.error('[Webhook CSV] Exceção:', err);
                               toast.error("Erro ao enviar CSV ao Drive");
@@ -505,7 +505,7 @@ export function ListaPedidos() {
                                       <AlertDialogFooter>
                                         <AlertDialogCancel disabled={csvLoading}>Cancelar</AlertDialogCancel>
                                         <AlertDialogAction disabled={csvLoading} onClick={baixarCsvPedido}>Download</AlertDialogAction>
-                                        <AlertDialogAction disabled={csvLoading} onClick={enviarCsvDrive}>Enviar ao Drive</AlertDialogAction>
+                                        <AlertDialogAction disabled={csvLoading} onClick={enviarCsvDrive}>Cadastrar Pedido</AlertDialogAction>
                                       </AlertDialogFooter>
                                     </AlertDialogContent>
                                   </AlertDialog>

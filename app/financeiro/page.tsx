@@ -34,7 +34,7 @@ import {
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ReferenceLine, Tooltip as RechartsTooltip } from "recharts"
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ReferenceLine, Tooltip as RechartsTooltip, Tooltip } from "recharts"
 import { toast } from "sonner"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -671,6 +671,11 @@ export default function FinanceiroPage() {
     return lojaEncontrada ? lojaEncontrada.nomeExibicao : nomeApi;
   }
 
+  function getNomeLojaPorId(id: number): string {
+    const loja = lojasConfig.find(l => String(l.idApi) === String(id));
+    return loja ? loja.nomeExibicao : 'Loja não encontrada';
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -1105,7 +1110,6 @@ export default function FinanceiroPage() {
                     <div>
                       <Label htmlFor="dataInicialBenchmark">Data Inicial</Label>
                       <DatePicker
-                        id="dataInicialBenchmark"
                         value={dataInicialBenchmark}
                         onChange={(value) => setDataInicialBenchmark(value)}
                         placeholder="Selecione a data inicial"
@@ -1115,7 +1119,6 @@ export default function FinanceiroPage() {
                     <div>
                       <Label htmlFor="dataFinalBenchmark">Data Final</Label>
                       <DatePicker
-                        id="dataFinalBenchmark"
                         value={dataFinalBenchmark}
                         onChange={(value) => setDataFinalBenchmark(value)}
                         placeholder="Selecione a data final"
@@ -1163,7 +1166,7 @@ export default function FinanceiroPage() {
                           {dadosBenchmark.map((store) => (
                             <TableRow key={store.id}>
                               <TableCell className="font-medium">{store.position}º</TableCell>
-                              <TableCell>{store.company_name}</TableCell>
+                              <TableCell>{getNomeLojaPorId(store.id)}</TableCell>
                               <TableCell className="text-right font-mono font-semibold">
                                 {formatarMoeda(store.balance.total)}
                               </TableCell>
@@ -1224,7 +1227,7 @@ export default function FinanceiroPage() {
                           <div key={item.id} className="flex items-center bg-card rounded-lg border p-3 shadow-sm">
                             <div className="w-10 text-lg font-bold text-orange-500 text-center">{item.position}º</div>
                             <div className="flex-1 ml-2">
-                              <div className="text-primary font-medium">{item.company_name}</div>
+                              <div className="text-primary font-medium">{getNomeLojaPorId(item.id)}</div>
                               <div className="relative h-7 mt-1 bg-muted rounded-full overflow-hidden flex items-center">
                                 <div
                                   className="absolute left-0 top-0 h-full rounded-full transition-all"
@@ -1284,7 +1287,6 @@ export default function FinanceiroPage() {
               <div>
                 <Label htmlFor="dataInicial">Data Inicial</Label>
                 <DatePicker
-                  id="dataInicial"
                   value={dataInicial}
                   onChange={(value) => setDataInicial(value)}
                   placeholder="Selecione a data inicial"
@@ -1294,7 +1296,6 @@ export default function FinanceiroPage() {
               <div>
                 <Label htmlFor="dataFinal">Data Final</Label>
                 <DatePicker
-                  id="dataFinal"
                   value={dataFinal}
                   onChange={(value) => setDataFinal(value)}
                   placeholder="Selecione a data final"
@@ -1539,16 +1540,16 @@ export default function FinanceiroPage() {
                                       </TableCell>
                                       <TableCell className="font-medium text-gray-600">
                                         <TooltipProvider>
-                                          <Tooltip>
+                                          <UITooltip>
                                             <TooltipTrigger asChild>
-                                              <span style={{ cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: 120 }}>
+                                              <span className="block truncate max-w-[100px]">
                                                 {formatarPrimeiroNome(hist.opened_user?.full_name)}
                                               </span>
                                             </TooltipTrigger>
                                             <TooltipContent side="top" align="center">
                                               {hist.opened_user?.full_name || 'Sem nome completo'}
                                             </TooltipContent>
-                                          </Tooltip>
+                                          </UITooltip>
                                         </TooltipProvider>
                                       </TableCell>
                                       <TableCell className="text-right font-mono text-gray-600">
@@ -1557,7 +1558,7 @@ export default function FinanceiroPage() {
                                       <TableCell className="text-right font-mono font-semibold">
                                         {formatarMoeda(Number(hist.amount_on_open) || 0)}
                                         <TooltipProvider>
-                                          <Tooltip>
+                                          <UITooltip>
                                             <TooltipTrigger asChild>
                                               {valorAberturaCorresponde ? (
                                                 <span className="inline-block ml-2 text-blue-400 text-lg align-middle" style={{ cursor: 'pointer' }}>
@@ -1574,7 +1575,7 @@ export default function FinanceiroPage() {
                                                 ? 'Abertura corresponde a um fechamento anterior'
                                                 : 'Sem fechamento anterior correspondente'}
                                             </TooltipContent>
-                                          </Tooltip>
+                                          </UITooltip>
                                         </TooltipProvider>
                                       </TableCell>
                                       <TableCell className="text-right font-mono text-red-600">
@@ -1586,7 +1587,7 @@ export default function FinanceiroPage() {
                                       <TableCell className="text-right font-mono text-white font-semibold">
                                         {formatarMoeda(Number(hist.amount_on_close) || 0)}
                                         <TooltipProvider>
-                                          <Tooltip>
+                                          <UITooltip>
                                             <TooltipTrigger asChild>
                                               {idsFechamentosUsados.includes(hist.id) ? (
                                                 <span className="inline-block ml-2 text-blue-400 text-lg align-middle" style={{ cursor: 'pointer' }}>
@@ -1603,7 +1604,7 @@ export default function FinanceiroPage() {
                                                 ? 'Fechamento foi usado para satisfazer uma abertura'
                                                 : 'Fechamento não foi usado para nenhuma abertura'}
                                             </TooltipContent>
-                                          </Tooltip>
+                                          </UITooltip>
                                         </TooltipProvider>
                                       </TableCell>
                                       <TableCell className="text-right font-mono font-semibold text-indigo-600">
@@ -1631,10 +1632,10 @@ export default function FinanceiroPage() {
                                       </TableCell>
                                       <TableCell className={`text-right font-mono font-semibold ${Number(hist.result_cash) >= 0 ? 'text-green-600' : 'text-red-600'}`}> 
                                         <TooltipProvider>
-                                          <Tooltip>
+                                          <UITooltip>
                                             <TooltipTrigger asChild>
                                               <span
-                                                style={{ cursor: 'pointer', borderBottom: '1px dotted #888' }}
+                                                className="cursor-pointer border-b border-dotted border-gray-400"
                                               >
                                                 {Number(hist.result_cash) >= 0 ? '+' : ''}{formatarMoeda(Number(hist.result_cash) || 0)}
                                               </span>
@@ -1642,7 +1643,7 @@ export default function FinanceiroPage() {
                                             <TooltipContent side="top" align="center">
                                               {hist.observation ? String(hist.observation) : 'Sem Observações'}
                                             </TooltipContent>
-                                          </Tooltip>
+                                          </UITooltip>
                                         </TooltipProvider>
                                       </TableCell>
                                     </TableRow>

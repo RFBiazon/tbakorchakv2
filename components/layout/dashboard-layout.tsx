@@ -77,11 +77,6 @@ const menuItems: MenuItem[] = [
     ]
   },
   { 
-    name: "Controle de Estoques", 
-    href: "/estoques", 
-    icon: Box 
-  },
-  { 
     name: "Controle Financeiro", 
     icon: DollarSign,
     submenu: [
@@ -106,7 +101,14 @@ const menuItems: MenuItem[] = [
     name: "Central de Compras", 
     href: "/compras", 
     icon: ShoppingCart 
-  }
+  },
+  { 
+    name: "Controle de Estoques", 
+    href: "/estoques", 
+    icon: Box 
+  },
+
+  
 ]
 
 interface DashboardStats {
