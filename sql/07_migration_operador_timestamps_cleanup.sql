@@ -1,0 +1,1 @@
+-- Migration: Remove timestamp columns from Operador table

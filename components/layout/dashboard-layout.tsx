@@ -94,6 +94,11 @@ const menuItems: MenuItem[] = [
         name: "Faturamento", 
         href: "/faturamento", 
         icon: FileText 
+      },
+      { 
+        name: "SCM", 
+        href: "/financeiro/scm", 
+        icon: Truck 
       }
     ]
   },
@@ -107,8 +112,11 @@ const menuItems: MenuItem[] = [
     href: "/estoques", 
     icon: Box 
   },
-
-  
+  { 
+    name: "Gestão de RH", 
+    href: "/gestao-rh", 
+    icon: Users 
+  },
 ]
 
 interface DashboardStats {

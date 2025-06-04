@@ -965,3 +965,44 @@ export async function deletePedido(pedidoId: number) {
     throw error
   }
 }
+
+/**
+ * Salva uma movimentação de caixa SCM no Supabase
+ * @param dados Objeto com todos os campos do formulário SCM
+ * @param storeIdInterno (opcional) ID interno da loja para usar o Supabase correto
+ */
+export async function salvarMovimentacaoSCM(dados: {
+  data_hora: string | Date,
+  loja: string,
+  operador: string,
+  caixa: string,
+  debito_visa?: number,
+  debito_master?: number,
+  debito_elo?: number,
+  debito_cabal?: number,
+  credito_visa?: number,
+  credito_master?: number,
+  credito_elo?: number,
+  credito_cabal?: number,
+  credito_amex?: number,
+  pix_maquininha?: number,
+  debito_sistema?: number,
+  credito_sistema?: number,
+  abertura_caixa?: number,
+  entradas?: number,
+  saidas?: number,
+  fechamento?: number,
+  observacao?: string,
+  autorizacao: boolean,
+  cpf_operador: string,
+}, storeIdInterno?: string) {
+  const supabase = createSupabaseClient(storeIdInterno)
+  const { error } = await supabase.from('scm_movimentacoes').insert([
+    {
+      ...dados,
+      data_hora: typeof dados.data_hora === 'string' ? new Date(dados.data_hora) : dados.data_hora,
+    }
+  ])
+  if (error) throw error
+  return true
+}

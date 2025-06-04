@@ -4,34 +4,44 @@
     "nomeExibicao": "Toledo 01",
     "idApi": "4",
     "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_TOLEDO01",
-    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO01"
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO01",
+    "cnpj": "35.001.302/0001-69",
+    "nome": "KORCHAK COMERCIO DE SORVETES E AÇAÍ"
   },
   {
     "idInterno": "toledo02",
     "nomeExibicao": "Toledo 02",
     "idApi": "40",
     "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_TOLEDO02",
-    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02"
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_TOLEDO02",
+    "cnpj": "38.336.768/0001-03",
+    "nome": "KORCHAK TBA TOLEDO LTDA"
   },
   {
     "idInterno": "videira",
     "nomeExibicao": "Videira",
     "idApi": "184",
     "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_VIDEIRA",
-    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_VIDEIRA"
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_VIDEIRA",
+    "cnpj": "47.625.050/0001-28",
+    "nome": "KORCHAK TBA VIDEIRA LTDA"
   },
   {
     "idInterno": "fraiburgo",
     "nomeExibicao": "Fraiburgo",
     "idApi": "528",
     "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_FRAIBURGO",
-    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_FRAIBURGO"
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_FRAIBURGO",
+    "cnpj": "56.131.243/0001-13",
+    "nome": "KORCHAK TBA FRAIBURGO LTDA"
   },
   {
     "idInterno": "campomourao",
     "nomeExibicao": "Campo Mourão",
     "idApi": "616",
     "supabaseUrlEnvVar": "NEXT_PUBLIC_SUPABASE_URL_CAMPOMOURAO",
-    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_CAMPOMOURAO"
+    "supabaseKeyEnvVar": "NEXT_PUBLIC_SUPABASE_KEY_CAMPOMOURAO",
+    "cnpj": "57.768.670/0001-70",
+    "nome": "KORCHAK TBA CAMPO MOURAO LTDA"
   }
 ] 

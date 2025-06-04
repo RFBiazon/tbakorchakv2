@@ -65,6 +65,12 @@ export function ListaPedidos() {
   const [pedidoParaExcluir, setPedidoParaExcluir] = useState<number | null>(null)
   const [excluindoPedido, setExcluindoPedido] = useState(false)
   const [lojaApi, setLojaApi] = useState<string | undefined>(undefined)
+  const [previewCsvOpen, setPreviewCsvOpen] = useState(false)
+  const [previewData, setPreviewData] = useState<{
+    numeroPedido: string;
+    produtos: { nome: string; quantidade: number }[];
+    csvText: string;
+  } | null>(null)
 
   // Filtros para o modal de pedidos API
   const lojasApi = lojasConfig.map((loja: LojaConfig) => ({ id: parseInt(loja.idApi), nome: loja.nomeExibicao }));
@@ -96,7 +102,7 @@ export function ListaPedidos() {
 
   const [dataInicialApi, setDataInicialApi] = useState(() => {
     const d = new Date();
-    d.setDate(1);
+    d.setDate(d.getDate() - 30);
     return d.toISOString().split('T')[0];
   })
   const [dataFinalApi, setDataFinalApi] = useState(() => new Date().toISOString().split('T')[0])
@@ -265,6 +271,84 @@ export function ListaPedidos() {
     return { label: 'Pendente de Cadastro', color: 'bg-red-100 text-red-800' };
   }
 
+  // Novo: função para processar CSV e extrair dados
+  function extrairDadosCsv(csvText: string) {
+    // Remover a primeira linha
+    const linhas = csvText.split('\n').filter(Boolean);
+    if (linhas.length === 0) return { numeroPedido: '', produtos: [], csvText };
+    const linhasSemPrimeira = linhas.slice(1);
+
+    // Extrair número do pedido
+    let numeroPedido = '';
+    for (const linha of linhasSemPrimeira) {
+      if (linha.toLowerCase().includes('num. pedido')) {
+        const partes = linha.split(',');
+        numeroPedido = partes[1]?.replaceAll('"', '').trim() || '';
+        break;
+      }
+    }
+
+    // Extrair produtos (após linha com 'PRODUTO')
+    const idxProdutos = linhasSemPrimeira.findIndex(l => l.toLowerCase().includes('produto') && l.toLowerCase().includes('quantidade'));
+    const produtos: { nome: string; quantidade: number }[] = [];
+    if (idxProdutos !== -1) {
+      for (let i = idxProdutos + 1; i < linhasSemPrimeira.length; i++) {
+        const linha = linhasSemPrimeira[i];
+        if (/total|peso|valor|Num\. Pedido|OBSERVACAO|PRODUTO/i.test(linha)) continue;
+        const col = linha.split(',').map((x: string) => x.replaceAll('"', '').trim());
+        const produto = col[0];
+        const quantidade = Number.parseInt(col[1]);
+        if (produto && !isNaN(quantidade)) {
+          produtos.push({ nome: produto, quantidade });
+        }
+      }
+    }
+    return { numeroPedido, produtos, csvText: linhasSemPrimeira.join('\n') };
+  }
+
+  // Modificar processarCsvESalvar para usar extrairDadosCsv e abrir modal editável
+  async function processarCsvESalvar(pedido: any) {
+    console.log('[FUNC] processarCsvESalvar chamado para pedido', pedido.id);
+    try {
+      console.log('[CSV] Iniciando processo para pedido', pedido.id);
+      setCsvLoading(true);
+      console.log('[CSV] Obtendo token da API...');
+      const token = await obterTokenApi();
+      console.log('[CSV] Token obtido');
+      const url = `https://amatech-prd.azure-api.net/api/odin/orders/${pedido.id}/csv`;
+      console.log('[CSV] Baixando CSV do pedido...');
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error("Erro ao baixar CSV");
+      console.log('[CSV] CSV baixado');
+      const csvText = await response.text();
+      console.log('[CSV] Processando CSV...');
+      const { numeroPedido, produtos, csvText: csvEditavel } = extrairDadosCsv(csvText);
+      console.log('[CSV] CSV processado, abrindo modal de preview');
+      setPreviewData({
+        numeroPedido,
+        produtos,
+        csvText: csvEditavel
+      });
+      setPreviewCsvOpen(true);
+      setAlertCsvOpen(false);
+    } catch (err) {
+      console.error("Erro ao processar CSV:", err);
+      toast.error("Erro ao processar CSV do pedido");
+    } finally {
+      setCsvLoading(false);
+    }
+  }
+
+  // Modificar o handler do botão de cadastrar pedido
+  const enviarCsvDrive = async () => {
+    console.log('[UI] Clique em Cadastrar Pedido no AlertDialog');
+    console.log('[DEBUG] pedidoSelecionado:', pedidoSelecionado);
+    if (!pedidoSelecionado) return;
+    await processarCsvESalvar(pedidoSelecionado);
+  };
+
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
@@ -390,9 +474,11 @@ export function ListaPedidos() {
                           }
                           // Handler para abrir AlertDialog do CSV
                           const abrirAlertCsv = () => {
+                            setPedidoSelecionado(pedido);
                             setCsvPedidoId(pedido.id.toString());
                             setCsvPedidoVhsys(pedido.vhsys?.toString() || pedido.id.toString());
                             setAlertCsvOpen(true);
+                            console.log('[UI] AlertDialog aberto para pedido', pedido.id);
                           }
                           // Handler para download do CSV
                           const baixarCsvPedido = async () => {
@@ -423,50 +509,10 @@ export function ListaPedidos() {
                           }
                           // Handler para enviar CSV ao Drive
                           const enviarCsvDrive = async () => {
-                            try {
-                              setCsvLoading(true);
-                              const token = await obterTokenApi();
-                              const url = `https://amatech-prd.azure-api.net/api/odin/orders/${pedido.id}/csv`;
-                              const response = await fetch(url, {
-                                headers: { "Authorization": `Bearer ${token}` }
-                              });
-                              if (!response.ok) throw new Error("Erro ao baixar CSV");
-                              const blob = await response.blob();
-                              const formData = new FormData();
-                              const nomeArquivo = `pedido_${pedido.vhsys || pedido.id}.csv`;
-                              formData.append('file', blob, nomeArquivo);
-                              formData.append('filename', `pedido_${pedido.vhsys || pedido.id}`);
-                              // Selecionar webhook conforme a loja
-                              let webhookUrl = '';
-                              const lojaNome = pedido.store?.company_name || '';
-                              if (lojaNome.includes('Toledo - PR 01')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_TOLEDO01 as string;
-                              else if (lojaNome.includes('Toledo - PR 02')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_TOLEDO02 as string;
-                              else if (lojaNome.toLowerCase().includes('videira')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_VIDEIRA as string;
-                              else if (lojaNome.toLowerCase().includes('fraiburgo')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_FRAIBURGO as string;
-                              else if (lojaNome.toLowerCase().includes('campo mourão') || lojaNome.toLowerCase().includes('campo mourao')) webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_UPDATE_CM as string;
-                              if (!webhookUrl) throw new Error('Webhook da loja não configurado!');
-                              // LOGS
-                              console.log('[Webhook CSV] Loja:', lojaNome);
-                              console.log('[Webhook CSV] Webhook URL:', webhookUrl);
-                              console.log('[Webhook CSV] Nome do arquivo:', nomeArquivo);
-                              const webhookResponse = await fetch(webhookUrl, {
-                                method: 'POST',
-                                body: formData
-                              });
-                              console.log('[Webhook CSV] Status:', webhookResponse.status, webhookResponse.statusText);
-                              if (!webhookResponse.ok) {
-                                const respText = await webhookResponse.text();
-                                console.error('[Webhook CSV] Corpo da resposta:', respText);
-                                throw new Error("Erro ao enviar CSV ao Drive");
-                              }
-                              toast.success('Pedido cadastrado com sucesso!');
-                            } catch (err) {
-                              console.error('[Webhook CSV] Exceção:', err);
-                              toast.error("Erro ao enviar CSV ao Drive");
-                            } finally {
-                              setCsvLoading(false);
-                              setAlertCsvOpen(false);
-                            }
+                            console.log('[UI] Clique em Cadastrar Pedido no AlertDialog');
+                            console.log('[DEBUG] pedidoSelecionado:', pedidoSelecionado);
+                            if (!pedidoSelecionado) return;
+                            await processarCsvESalvar(pedidoSelecionado);
                           }
 
                           // Status do pedido
@@ -833,6 +879,86 @@ export function ListaPedidos() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Preview do CSV */}
+      <Dialog open={previewCsvOpen} onOpenChange={setPreviewCsvOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Preview do CSV - Pedido {previewData?.numeroPedido || '---'}</DialogTitle>
+            <DialogDescription>
+              Edite o CSV abaixo se necessário. O número do pedido e os produtos serão atualizados automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          {previewData && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold mb-2">Número do Pedido:</h3>
+                <p className="text-muted-foreground">{previewData.numeroPedido || '---'}</p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">Produtos:</h3>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Produto</th>
+                        <th className="text-right py-2">Quantidade</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.produtos.map((prod, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="py-1">{prod.nome}</td>
+                          <td className="py-1 text-right">{prod.quantidade}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">CSV Original (editável):</h3>
+                <textarea
+                  className="w-full bg-muted p-4 rounded-md text-xs overflow-x-auto min-h-[180px] font-mono"
+                  value={previewData.csvText}
+                  onChange={e => {
+                    const novoCsv = e.target.value;
+                    const { numeroPedido, produtos } = extrairDadosCsv(novoCsv);
+                    setPreviewData({ ...previewData, csvText: novoCsv, numeroPedido, produtos });
+                  }}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setPreviewCsvOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={async () => {
+                  if (!previewData) return;
+                  try {
+                    setCsvLoading(true);
+                    const supabase = getSupabaseClient();
+                    const { error } = await supabase
+                      .from("documents")
+                      .insert([
+                        { content: previewData.csvText }
+                      ]);
+                    if (error) throw error;
+                    toast.success("CSV salvo com sucesso!");
+                    setPreviewCsvOpen(false);
+                    carregarPedidos();
+                  } catch (err) {
+                    toast.error("Erro ao salvar CSV no Supabase");
+                  } finally {
+                    setCsvLoading(false);
+                  }
+                }} disabled={csvLoading}>
+                  {csvLoading ? "Salvando..." : "Salvar"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
