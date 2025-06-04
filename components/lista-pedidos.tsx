@@ -5,7 +5,7 @@ import Link from "next/link"
 import { type Pedido, getPedidos, arquivarPedido, desarquivarPedido, getSupabaseClient, deletePedido } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Home, Download, Printer, BarChart2, Trash2, Eye } from "lucide-react"
+import { Search, Home, Download, Printer, BarChart2, Trash2, Eye, Copy } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, AlertDialogTrigger } from "@/components/ui/alert-dialog"
@@ -29,6 +29,12 @@ const lojasConfig: LojaConfig[] = lojasConfigData;
 const getLojaName = (idInterno: string) => {
   const loja = lojasConfig.find((loja: LojaConfig) => loja.idInterno === idInterno);
   return loja ? loja.nomeExibicao : idInterno;
+}
+
+// Função para buscar nome da loja pelo idApi
+function getLojaNameByApiId(idApi: string) {
+  const loja = lojasConfig.find((loja: LojaConfig) => loja.idApi === idApi);
+  return loja ? loja.nomeExibicao : idApi;
 }
 
 export function ListaPedidos() {
@@ -70,6 +76,12 @@ export function ListaPedidos() {
     numeroPedido: string;
     produtos: { nome: string; quantidade: number }[];
     csvText: string;
+  } | null>(null)
+  const [modalBoletoAberto, setModalBoletoAberto] = useState(false)
+  const [boletoInfo, setBoletoInfo] = useState<{
+    vencimento: string;
+    linhaDigitavel: string;
+    valor: string;
   } | null>(null)
 
   // Filtros para o modal de pedidos API
@@ -349,6 +361,22 @@ export function ListaPedidos() {
     await processarCsvESalvar(pedidoSelecionado);
   };
 
+  function formatarDataBoleto(data: string) {
+    if (!data || data.length !== 8) return '-';
+    const ano = data.substring(0, 4);
+    const mes = data.substring(4, 6);
+    const dia = data.substring(6, 8);
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  function formatarValorBoleto(valor: string) {
+    if (!valor) return '-';
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(Number(valor));
+  }
+
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
@@ -435,7 +463,10 @@ export function ListaPedidos() {
                           <th className="text-left py-2"># Pedido (vhsys)</th>
                           <th className="text-left py-2">Loja</th>
                           <th className="text-left py-2">Data</th>
-                          <th className="text-right py-2">Valor</th>
+                          <th className="text-left py-2 px-4">Valor</th>
+                          <th className="text-left py-2">Vencimento</th>
+                          <th className="text-center py-2">NF-e</th>
+                          <th className="text-center py-2">CSV</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -446,8 +477,16 @@ export function ListaPedidos() {
                             const [dia, mes, ano] = pedido.created_at.split(" ")[0].split("-");
                             dataFormatada = `${dia}/${mes}/${ano}`;
                           }
-                          // Loja: store.company_name
-                          const loja = pedido.store?.company_name || "-";
+                          // Loja: usar getLojaNameByApiId com o id da loja
+                          const loja = getLojaNameByApiId(
+                            pedido.store?.id?.toString() ||
+                            pedido.store_id?.toString() ||
+                            pedido.id_store?.toString() ||
+                            pedido.store?.idApi?.toString() ||
+                            pedido.store_idApi?.toString() ||
+                            pedido.idApi?.toString() ||
+                            ""
+                          );
                           // Valor: invoices.f2_valfat (pode ser array ou objeto)
                           let valor = "-";
                           if (pedido.invoices) {
@@ -522,7 +561,11 @@ export function ListaPedidos() {
                             <tr key={pedido.id} className="border-b">
                               <td className="py-1 font-mono">
                                 <div className="flex items-center gap-2">
-                                  <button className="text-blue-600 hover:underline" onClick={abrirModalProdutos} title="Ver produtos do pedido">
+                                  <button 
+                                    className="text-emerald-400 font-semibold transition-all duration-150 rounded px-1 hover:bg-emerald-900/10 hover:scale-105 focus:outline-none" 
+                                    onClick={abrirModalProdutos} 
+                                    title="Ver produtos do pedido"
+                                  >
                                     {pedido.vhsys}
                                   </button>
                                   <span className={`text-xs px-2 py-0.5 rounded ${status.color}`} title={status.label}>
@@ -532,30 +575,83 @@ export function ListaPedidos() {
                               </td>
                               <td className="py-1">{loja}</td>
                               <td className="py-1">{dataFormatada}</td>
-                              <td className="py-1 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <span>{valor}</span>
-                                  <AlertDialog open={alertCsvOpen && csvPedidoId === pedido.id.toString()} onOpenChange={setAlertCsvOpen}>
-                                    <AlertDialogTrigger asChild>
-                                      <button onClick={abrirAlertCsv} title="Baixar ou Enviar CSV do pedido" className="text-primary hover:text-primary-foreground">
-                                        <Download size={16} />
-                                      </button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Exportar Pedido</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          O que deseja fazer com o arquivo CSV do pedido <b>{pedido.vhsys}</b>?
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={csvLoading}>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction disabled={csvLoading} onClick={baixarCsvPedido}>Download</AlertDialogAction>
-                                        <AlertDialogAction disabled={csvLoading} onClick={enviarCsvDrive}>Cadastrar Pedido</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </div>
+                              <td className="py-1 text-left px-4">
+                                <button
+                                  onClick={() => {
+                                    const codigoBarras = pedido.bank_slips?.[0]?.e1_coddig || '';
+                                    if (codigoBarras) {
+                                      navigator.clipboard.writeText(codigoBarras);
+                                      toast.success('Código de barras copiado para área de transferência!');
+                                    } else {
+                                      toast.error('Código de barras não encontrado para este pedido.');
+                                    }
+                                  }}
+                                  className="text-white cursor-pointer transition-colors"
+                                  style={{ transition: 'color 0.15s' }}
+                                  onMouseOver={e => (e.currentTarget.style.color = '#a78bfa')}
+                                  onMouseOut={e => (e.currentTarget.style.color = '#fff')}
+                                  title="Clique para copiar o código de barras do boleto"
+                                >
+                                  {valor}
+                                </button>
+                              </td>
+                              <td className="py-1 text-left">
+                                {formatarDataBoleto(pedido.bank_slips?.[0]?.e1_vencto || '')}
+                              </td>
+                              <td className="py-1 text-center">
+                                {pedido.invoices?.[0]?.f2_chvnfe && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const token = await obterTokenApi();
+                                        const url = `https://amatech-prd.azure-api.net/api/odin/order/attachment/${pedido.invoices[0].f2_chvnfe}/pdf`;
+                                        const response = await fetch(url, {
+                                          headers: { "Authorization": `Bearer ${token}` }
+                                        });
+                                        if (!response.ok) throw new Error("Erro ao baixar PDF");
+                                        const blob = await response.blob();
+                                        const urlBlob = window.URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = urlBlob;
+                                        a.download = `nota_fiscal_${pedido.vhsys}.pdf`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        a.remove();
+                                        window.URL.revokeObjectURL(urlBlob);
+                                        toast.success('PDF baixado com sucesso!');
+                                      } catch (err) {
+                                        toast.error("Erro ao baixar PDF da nota fiscal");
+                                      }
+                                    }}
+                                    title="Baixar PDF da Nota Fiscal"
+                                    style={{ color: '#f59e42' }}
+                                    className="hover:text-orange-500"
+                                  >
+                                    <Printer size={16} />
+                                  </button>
+                                )}
+                              </td>
+                              <td className="py-1 text-center">
+                                <AlertDialog open={alertCsvOpen && csvPedidoId === pedido.id.toString()} onOpenChange={setAlertCsvOpen}>
+                                  <AlertDialogTrigger asChild>
+                                    <button onClick={abrirAlertCsv} title="Baixar ou Enviar CSV do pedido" style={{ color: '#4ade80' }} className="hover:text-emerald-500">
+                                      <Download size={16} />
+                                    </button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Exportar Pedido</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        O que deseja fazer com o arquivo CSV do pedido <b>{pedido.vhsys}</b>?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel disabled={csvLoading}>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction disabled={csvLoading} onClick={baixarCsvPedido}>Download</AlertDialogAction>
+                                      <AlertDialogAction disabled={csvLoading} onClick={enviarCsvDrive}>Cadastrar Pedido</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </td>
                             </tr>
                           );
@@ -954,6 +1050,47 @@ export function ListaPedidos() {
                 }} disabled={csvLoading}>
                   {csvLoading ? "Salvando..." : "Salvar"}
                 </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Boleto */}
+      <Dialog open={modalBoletoAberto} onOpenChange={setModalBoletoAberto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Informações do Boleto</DialogTitle>
+            <DialogDescription>
+              Detalhes do boleto de pagamento.
+            </DialogDescription>
+          </DialogHeader>
+          {boletoInfo && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold mb-1">Vencimento:</h3>
+                <p className="text-muted-foreground">{boletoInfo.vencimento}</p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1">Valor:</h3>
+                <p className="text-muted-foreground">{boletoInfo.valor}</p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1">Linha Digitável:</h3>
+                <div className="flex items-center gap-2">
+                  <p className="text-muted-foreground font-mono">{boletoInfo.linhaDigitavel}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(boletoInfo.linhaDigitavel);
+                      toast.success('Linha digitável copiada!');
+                    }}
+                    title="Copiar linha digitável"
+                  >
+                    <Copy size={16} />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
