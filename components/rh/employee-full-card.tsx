@@ -103,9 +103,11 @@ export interface EmployeeCadastro {
 export interface EmployeeFullCardProps {
   employee: EmployeeCadastro;
   employeeId: string;
+  driveLink?: string;
+  onDriveLinkUpdate?: (link: string) => void;
 }
 
-export function EmployeeFullCard({ employee, employeeId }: EmployeeFullCardProps) {
+export function EmployeeFullCard({ employee, employeeId, driveLink, onDriveLinkUpdate }: EmployeeFullCardProps) {
   const router = useRouter()
   const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
   const statusColor = (status: string) => {
@@ -119,13 +121,7 @@ export function EmployeeFullCard({ employee, employeeId }: EmployeeFullCardProps
   }
 
   return (
-    <Card
-      className="cursor-pointer hover:shadow-lg transition-shadow"
-      onClick={() => router.push(`/gestao-rh/${employeeId}/view`)}
-      tabIndex={0}
-      role="button"
-      aria-label={`Ver detalhes de ${employee.informacoes_pessoais.nome}`}
-    >
+    <Card className="hover:shadow-lg transition-shadow">
       <CardHeader className="flex flex-row items-center gap-4">
         <Avatar>
           <AvatarFallback>{getInitials(employee.informacoes_pessoais.nome)}</AvatarFallback>
@@ -147,6 +143,14 @@ export function EmployeeFullCard({ employee, employeeId }: EmployeeFullCardProps
           <div><span className="text-muted-foreground">Celular:</span> {employee.informacoes_pessoais.celular}</div>
           <div><span className="text-muted-foreground">E-mail:</span> {employee.informacoes_pessoais.email}</div>
           <div><span className="text-muted-foreground">Salário:</span> {employee.dados_registro.salario}</div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => router.push(`/gestao-rh/${employeeId}/view`)}
+            className="text-sm text-blue-500 hover:underline"
+          >
+            Ver Detalhes
+          </button>
         </div>
       </CardContent>
     </Card>

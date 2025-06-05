@@ -16,6 +16,7 @@ import lojasConfig from '../../../lojas.config.json'
 import { Textarea } from "@/components/ui/textarea"
 import { useSelectedStore } from "@/hooks/useSelectedStore"
 import { toast } from "sonner"
+import { MultiFileUpload } from '@/components/rh/multi-file-upload'
 
 const lojas = lojasConfig.map(loja => ({ id: loja.idInterno, nome: loja.nomeExibicao }))
 
@@ -138,6 +139,8 @@ export default function NovoColaboradorPage() {
   const [uploadedDocs, setUploadedDocs] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [employeeId, setEmployeeId] = useState<string | null>(null)
+  const [checklist, setChecklist] = useState<Record<string, string>>({})
 
   // Atualizar os campos travados se a loja mudar
   useEffect(() => {
@@ -211,8 +214,8 @@ export default function NovoColaboradorPage() {
       }
 
       // Criar novo colaborador
-      await EmployeesService.createEmployee(form)
-      
+      const created = await EmployeesService.createEmployee(form)
+      setEmployeeId(created.id)
       toast.success('Colaborador cadastrado com sucesso!')
       router.push('/gestao-rh')
     } catch (err) {
@@ -241,10 +244,9 @@ export default function NovoColaboradorPage() {
         )}
 
         <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-9">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="pessoais">Dados Pessoais</TabsTrigger>
             <TabsTrigger value="profissionais">Dados Profissionais</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="declaracoes">Declarações</TabsTrigger>
             <TabsTrigger value="bancarios">Dados Bancários</TabsTrigger>
             <TabsTrigger value="uniformes">Uniformes</TabsTrigger>
@@ -515,182 +517,28 @@ export default function NovoColaboradorPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="documentos">
-            <Card>
-              <CardHeader>
-                <CardTitle>Documentos em Anexo</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>RG</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.rg}
-                    onValueChange={value => updateForm("documentos_em_anexo.rg", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>CPF</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.cpf}
-                    onValueChange={value => updateForm("documentos_em_anexo.cpf", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Habilitação</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.habilitacao}
-                    onValueChange={value => updateForm("documentos_em_anexo.habilitacao", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Comprovante de Residência</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.comprovante_residencia}
-                    onValueChange={value => updateForm("documentos_em_anexo.comprovante_residencia", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>CTPS</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.ctps}
-                    onValueChange={value => updateForm("documentos_em_anexo.ctps", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>NIS</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.nis}
-                    onValueChange={value => updateForm("documentos_em_anexo.nis", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Foto 3x4</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.foto_3x4}
-                    onValueChange={value => updateForm("documentos_em_anexo.foto_3x4", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Documentos dos Filhos Menores de 14 anos</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.documentos_filhos_menores_14}
-                    onValueChange={value => updateForm("documentos_em_anexo.documentos_filhos_menores_14", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Exame Admissional</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.exame_admissional}
-                    onValueChange={value => updateForm("documentos_em_anexo.exame_admissional", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Carteirinha de Vacinação</Label>
-                  <Select 
-                    value={form.documentos_em_anexo.carteirinha_vacinacao}
-                    onValueChange={value => updateForm("documentos_em_anexo.carteirinha_vacinacao", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status do documento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="declaracoes">
             <Card>
               <CardHeader>
-                <CardTitle>Declarações Enviadas</CardTitle>
+                <CardTitle>Declarações</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>EPIS</Label>
+                  <Select 
+                    value={form.declaracoes_enviadas.epis}
+                    onValueChange={value => updateForm("declaracoes_enviadas.epis", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status da declaração" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="N/A">Não Aplicável</SelectItem>
+                      <SelectItem value="PENDENTE">Pendente</SelectItem>
+                      <SelectItem value="ENVIADO">Enviado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <Label>Chave</Label>
                   <Select 
@@ -712,22 +560,6 @@ export default function NovoColaboradorPage() {
                   <Select 
                     value={form.declaracoes_enviadas.uniforme}
                     onValueChange={value => updateForm("declaracoes_enviadas.uniforme", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status da declaração" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">Não Aplicável</SelectItem>
-                      <SelectItem value="PENDENTE">Pendente</SelectItem>
-                      <SelectItem value="ENVIADO">Enviado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>EPIs</Label>
-                  <Select 
-                    value={form.declaracoes_enviadas.epis}
-                    onValueChange={value => updateForm("declaracoes_enviadas.epis", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Status da declaração" />
@@ -766,53 +598,45 @@ export default function NovoColaboradorPage() {
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <Label>PIX</Label>
+                  <Input 
+                    value={form.dados_bancarios.pix}
+                    onChange={e => updateForm("dados_bancarios.pix", e.target.value)}
+                  />
+                </div>
+                <div>
                   <Label>Banco</Label>
                   <Input 
-                    value={form.dados_bancarios.banco} 
+                    value={form.dados_bancarios.banco}
                     onChange={e => updateForm("dados_bancarios.banco", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Número do Banco</Label>
-                  <Input 
-                    value={form.dados_bancarios.numero_banco} 
-                    onChange={e => updateForm("dados_bancarios.numero_banco", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Agência</Label>
-                  <Input 
-                    value={form.dados_bancarios.agencia} 
-                    onChange={e => updateForm("dados_bancarios.agencia", e.target.value)}
                   />
                 </div>
                 <div>
                   <Label>Conta</Label>
                   <Input 
-                    value={form.dados_bancarios.conta} 
+                    value={form.dados_bancarios.conta}
                     onChange={e => updateForm("dados_bancarios.conta", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>Tipo de Conta</Label>
-                  <Select 
-                    value={form.dados_bancarios.tipo_conta}
-                    onValueChange={value => updateForm("dados_bancarios.tipo_conta", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o tipo de conta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CORRENTE">Conta Corrente</SelectItem>
-                      <SelectItem value="POUPANCA">Conta Poupança</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Agência</Label>
+                  <Input 
+                    value={form.dados_bancarios.agencia}
+                    onChange={e => updateForm("dados_bancarios.agencia", e.target.value)}
+                  />
                 </div>
                 <div>
-                  <Label>PIX</Label>
+                  <Label>Tipo de Conta</Label>
                   <Input 
-                    value={form.dados_bancarios.pix} 
-                    onChange={e => updateForm("dados_bancarios.pix", e.target.value)}
+                    value={form.dados_bancarios.tipo_conta}
+                    onChange={e => updateForm("dados_bancarios.tipo_conta", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Número do Banco</Label>
+                  <Input 
+                    value={form.dados_bancarios.numero_banco}
+                    onChange={e => updateForm("dados_bancarios.numero_banco", e.target.value)}
                   />
                 </div>
               </CardContent>
@@ -1043,66 +867,18 @@ export default function NovoColaboradorPage() {
                   <CardTitle>Upload de Documentos</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div
-                    className={`border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-8 mb-6 transition-colors ${dragActive ? 'border-primary bg-muted' : 'border-muted'}`}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <UploadCloud className="w-12 h-12 mb-2 text-muted-foreground" />
-                    <div className="font-medium">Clique ou arraste arquivos aqui</div>
-                    <div className="text-xs text-muted-foreground">Suporta arquivos PDF, JPEG, PNG</div>
-                    <input
-                      type="file"
-                      multiple
-                      ref={fileInputRef}
-                      style={{ display: "none" }}
-                      onChange={handleFileChange}
+                  {employeeId ? (
+                    <MultiFileUpload
+                      employeeId={employeeId}
+                      employeeName={form.informacoes_pessoais.nome}
+                      driveLink={null}
+                      onUploadComplete={async (link: string) => {
+                        await EmployeesService.updateEmployee(employeeId, { drive_link: link })
+                      }}
+                      renderChecklist={setChecklist}
                     />
-                  </div>
-                  {uploadedDocs.length > 0 && (
-                    <>
-                      <div className="flex gap-2 mb-2 justify-end">
-                        <Button variant="destructive" size="sm" onClick={() => setUploadedDocs([])}>
-                          Excluir Todos
-                        </Button>
-                        <Button variant="default" size="sm" onClick={() => {/* lógica de envio aqui */}}>
-                          Enviar
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        {uploadedDocs.map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="grid grid-cols-12 items-center gap-2 bg-muted/40 rounded px-2 py-2"
-                            style={{ minHeight: 48 }}
-                          >
-                            <span className="truncate col-span-5 text-sm text-muted-foreground" title={doc.file.name}>
-                              {doc.file.name}
-                            </span>
-                            <div className="col-span-5">
-                              <Select value={doc.tipo} onValueChange={tipo => handleTipoChange(idx, tipo)}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Tipo de Documento" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {tiposDocumentos.map(opt => (
-                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="col-span-2 flex justify-end">
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveDoc(idx)}>
-                                Remover
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
+                  ) : (
+                    <div className="text-muted-foreground">Salve o colaborador antes de anexar documentos.</div>
                   )}
                 </CardContent>
               </Card>
@@ -1112,19 +888,19 @@ export default function NovoColaboradorPage() {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {tiposDocumentos.map(doc => {
-                      const anexado = uploadedDocs.some(d => d.tipo === doc.value)
-                      return (
-                        <li key={doc.value} className="flex items-center gap-2">
-                          {anexado ? (
-                            <CheckCircle className="text-green-500 w-5 h-5" />
-                          ) : (
-                            <Circle className="text-muted-foreground w-5 h-5" />
-                          )}
-                          <span>{doc.label}</span>
-                        </li>
-                      )
-                    })}
+                    {tiposDocumentos.map(doc => (
+                      <li key={doc.value} className="flex items-center gap-2">
+                        {checklist && checklist[doc.value] ? (
+                          <span className="text-green-500">●</span>
+                        ) : (
+                          <span className="text-muted-foreground">○</span>
+                        )}
+                        <span>{doc.label}</span>
+                        {checklist && checklist[doc.value] && (
+                          <span className="ml-2"><svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13v3a1 1 0 001 1h3m-4-4l6-6m0 0l-6 6m6-6v6a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v6z" /></svg></span>
+                        )}
+                      </li>
+                    ))}
                   </ul>
                 </CardContent>
               </Card>

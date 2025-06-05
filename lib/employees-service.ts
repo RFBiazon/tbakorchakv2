@@ -6,6 +6,7 @@ export interface EmployeeData {
   unidade: string;
   razao_social: string;
   cnpj: string;
+  drive_link?: string;
   dados_registro: {
     numero_registro_esocial: string;
     data_contratacao: string;
@@ -144,11 +145,24 @@ export class EmployeesService {
     return data;
   }
 
-  static async updateEmployee(id: string, employeeData: Partial<EmployeeData>) {
+  static async updateEmployee(id: string, employeeData: Partial<EmployeeData> & { drive_link?: string, documents_jsonb?: any[] }) {
     const supabase = getSupabaseClient();
+    const { drive_link, documents_jsonb, ...employeeDataWithoutDriveLinkAndDocs } = employeeData;
+    
+    const updateData: any = {};
+    if (Object.keys(employeeDataWithoutDriveLinkAndDocs).length > 0) {
+      updateData.employee_data = employeeDataWithoutDriveLinkAndDocs;
+    }
+    if (drive_link !== undefined) {
+      updateData.drive_link = drive_link;
+    }
+    if (documents_jsonb !== undefined) {
+      updateData.documents_jsonb = documents_jsonb;
+    }
+
     const { data, error } = await supabase
       .from('employees')
-      .update({ employee_data: employeeData })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -215,5 +229,16 @@ export class EmployeesService {
 
     if (error) throw error;
     return data;
+  }
+
+  static async getEmployeeDocuments(id: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('employees')
+      .select('documents_jsonb')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data?.documents_jsonb || [];
   }
 } 

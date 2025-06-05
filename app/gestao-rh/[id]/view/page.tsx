@@ -6,7 +6,7 @@ import { EmployeeCadastro } from "@/components/rh/employee-full-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Pencil, Plus, Download, Trash2, UploadCloud, CheckCircle, Circle } from "lucide-react"
+import { ArrowLeft, Pencil, Plus, Download, Trash2, UploadCloud, CheckCircle, Circle, Link as LinkIcon } from "lucide-react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { EmployeesService, EmployeeData } from "@/lib/employees-service"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,8 @@ import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import lojasConfig from '@/lojas.config.json'
+import { MultiFileUpload } from '@/components/rh/multi-file-upload'
+import { OcorrenciaModal, Ocorrencia } from '@/components/rh/ocorrencia-modal'
 
 const lojas = lojasConfig.map(loja => ({ 
   id: loja.idInterno, 
@@ -72,6 +74,7 @@ export default function EmployeeViewPage() {
   const [uploadedDocs, setUploadedDocs] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [checklist, setChecklist] = useState<Record<string, string>>({})
 
   useEffect(() => {
     loadEmployee()
@@ -310,13 +313,15 @@ export default function EmployeeViewPage() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-          <TabsList>
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="pessoais">Dados Pessoais</TabsTrigger>
             <TabsTrigger value="profissionais">Dados Profissionais</TabsTrigger>
             <TabsTrigger value="declaracoes">Declarações</TabsTrigger>
             <TabsTrigger value="bancarios">Dados Bancários</TabsTrigger>
-            <TabsTrigger value="ocorrencias">Ocorrências</TabsTrigger>
+            <TabsTrigger value="uniformes">Uniformes</TabsTrigger>
+            <TabsTrigger value="estrangeiro">Estrangeiro</TabsTrigger>
             <TabsTrigger value="upload">Upload de Documentos</TabsTrigger>
+            <TabsTrigger value="ocorrencias">Ocorrências</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pessoais">
@@ -325,86 +330,22 @@ export default function EmployeeViewPage() {
                 <CardTitle>Dados Pessoais</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Nome</div>
-                  <div>{form.informacoes_pessoais.nome}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Situação</div>
-                  <div>{form.informacoes_pessoais.situacao}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Data de Nascimento</div>
-                  <div>{form.informacoes_pessoais.data_nascimento}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">CPF</div>
-                  <div>{form.informacoes_pessoais.cpf}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">RG</div>
-                  <div>{form.informacoes_pessoais.rg}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Órgão Emissor RG</div>
-                  <div>{form.informacoes_pessoais.orgao_emissor_rg}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">CTPS</div>
-                  <div>{form.informacoes_pessoais.ctps}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">PIS/NIS</div>
-                  <div>{form.informacoes_pessoais.pis_nis}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Celular</div>
-                  <div>{form.informacoes_pessoais.celular}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Email</div>
-                  <div>{form.informacoes_pessoais.email}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Nome do Pai</div>
-                  <div>{form.informacoes_pessoais.nome_pai}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Nome da Mãe</div>
-                  <div>{form.informacoes_pessoais.nome_mae}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Cidade de Nascimento</div>
-                  <div>{form.informacoes_pessoais.cidade_nascimento}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Necessita Vale Transporte</div>
-                  <div>{form.informacoes_pessoais.necessita_vale_transporte ? "Sim" : "Não"}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Quantidade de Filhos até 14 anos</div>
-                  <div>{form.informacoes_pessoais.quant_filhos_ate_14}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Celular de Parente</div>
-                  <div>{form.informacoes_pessoais.celular_parente}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Endereço</div>
-                  <div>{form.informacoes_pessoais.endereco.logradouro}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Cidade</div>
-                  <div>{form.informacoes_pessoais.endereco.cidade}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Estado</div>
-                  <div>{form.informacoes_pessoais.endereco.estado}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">CEP</div>
-                  <div>{form.informacoes_pessoais.endereco.cep}</div>
-                </div>
+                <div><Label>Nome</Label><div>{employee.employee_data.informacoes_pessoais.nome}</div></div>
+                <div><Label>CPF</Label><div>{employee.employee_data.informacoes_pessoais.cpf}</div></div>
+                <div><Label>RG</Label><div>{employee.employee_data.informacoes_pessoais.rg}</div></div>
+                <div><Label>CTPS</Label><div>{employee.employee_data.informacoes_pessoais.ctps}</div></div>
+                <div><Label>Email</Label><div>{employee.employee_data.informacoes_pessoais.email}</div></div>
+                <div><Label>Celular</Label><div>{employee.employee_data.informacoes_pessoais.celular}</div></div>
+                <div><Label>PIS/NIS</Label><div>{employee.employee_data.informacoes_pessoais.pis_nis}</div></div>
+                <div><Label>Órgão Emissor RG</Label><div>{employee.employee_data.informacoes_pessoais.orgao_emissor_rg}</div></div>
+                <div><Label>Data de Nascimento</Label><div>{employee.employee_data.informacoes_pessoais.data_nascimento}</div></div>
+                <div><Label>Nome da Mãe</Label><div>{employee.employee_data.informacoes_pessoais.nome_mae}</div></div>
+                <div><Label>Nome do Pai</Label><div>{employee.employee_data.informacoes_pessoais.nome_pai}</div></div>
+                <div><Label>Cidade de Nascimento</Label><div>{employee.employee_data.informacoes_pessoais.cidade_nascimento}</div></div>
+                <div><Label>Celular de Parente</Label><div>{employee.employee_data.informacoes_pessoais.celular_parente}</div></div>
+                <div><Label>Quantidade de Filhos até 14 anos</Label><div>{employee.employee_data.informacoes_pessoais.quant_filhos_ate_14}</div></div>
+                <div><Label>Necessita Vale Transporte</Label><div>{employee.employee_data.informacoes_pessoais.necessita_vale_transporte ? 'Sim' : 'Não'}</div></div>
+                <div className="col-span-2"><Label>Endereço</Label><div>{employee.employee_data.informacoes_pessoais.endereco.logradouro}, {employee.employee_data.informacoes_pessoais.endereco.cidade} - {employee.employee_data.informacoes_pessoais.endereco.estado}, CEP: {employee.employee_data.informacoes_pessoais.endereco.cep}</div></div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -415,50 +356,15 @@ export default function EmployeeViewPage() {
                 <CardTitle>Dados Profissionais</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Unidade</div>
-                  <div>{getStoreName(form.unidade)}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Razão Social</div>
-                  <div>{form.razao_social}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">CNPJ</div>
-                  <div>{form.cnpj}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Cargo/Função</div>
-                  <div>{form.dados_registro.cargo_funcao}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Departamento</div>
-                  <div>{form.dados_registro.departamento}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Data Contratação</div>
-                  <div>{form.dados_registro.data_contratacao}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Turno</div>
-                  <div>{form.dados_registro.turno}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Carga Horária</div>
-                  <div>{form.dados_registro.carga_horaria}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Descanso Semanal</div>
-                  <div>{form.dados_registro.descanso_semanal}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Salário</div>
-                  <div>{form.dados_registro.salario}</div>
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground">Data Exame Admissional</div>
-                  <div>{form.dados_registro.data_exame_admissional}</div>
-                </div>
+                <div><Label>Cargo/Função</Label><div>{employee.employee_data.dados_registro.cargo_funcao}</div></div>
+                <div><Label>Departamento</Label><div>{employee.employee_data.dados_registro.departamento}</div></div>
+                <div><Label>Turno</Label><div>{employee.employee_data.dados_registro.turno}</div></div>
+                <div><Label>Salário</Label><div>{employee.employee_data.dados_registro.salario}</div></div>
+                <div><Label>Carga Horária</Label><div>{employee.employee_data.dados_registro.carga_horaria}</div></div>
+                <div><Label>Data de Contratação</Label><div>{employee.employee_data.dados_registro.data_contratacao}</div></div>
+                <div><Label>Descanso Semanal</Label><div>{employee.employee_data.dados_registro.descanso_semanal}</div></div>
+                <div><Label>Data do Exame Admissional</Label><div>{employee.employee_data.dados_registro.data_exame_admissional}</div></div>
+                <div><Label>Número Registro eSocial</Label><div>{employee.employee_data.dados_registro.numero_registro_esocial}</div></div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -469,12 +375,10 @@ export default function EmployeeViewPage() {
                 <CardTitle>Declarações</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries(form.declaracoes_enviadas || {}).map(([key, value]) => (
-                  <div key={key}>
-                    <div className="text-sm font-medium text-muted-foreground">{key.replace(/_/g, ' ')}</div>
-                    <div>{String(value)}</div>
-                  </div>
-                ))}
+                <div><Label>EPIS</Label><div>{employee.employee_data.declaracoes_enviadas.epis}</div></div>
+                <div><Label>Chave</Label><div>{employee.employee_data.declaracoes_enviadas.chave}</div></div>
+                <div><Label>Uniforme</Label><div>{employee.employee_data.declaracoes_enviadas.uniforme}</div></div>
+                <div><Label>Vale Transporte</Label><div>{employee.employee_data.declaracoes_enviadas.vale_transporte}</div></div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -485,14 +389,97 @@ export default function EmployeeViewPage() {
                 <CardTitle>Dados Bancários</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries(form.dados_bancarios || {}).map(([key, value]) => (
-                  <div key={key}>
-                    <div className="text-sm font-medium text-muted-foreground">{key.replace(/_/g, ' ')}</div>
-                    <div>{String(value)}</div>
-                  </div>
-                ))}
+                <div><Label>PIX</Label><div>{employee.employee_data.dados_bancarios.pix}</div></div>
+                <div><Label>Banco</Label><div>{employee.employee_data.dados_bancarios.banco}</div></div>
+                <div><Label>Conta</Label><div>{employee.employee_data.dados_bancarios.conta}</div></div>
+                <div><Label>Agência</Label><div>{employee.employee_data.dados_bancarios.agencia}</div></div>
+                <div><Label>Tipo de Conta</Label><div>{employee.employee_data.dados_bancarios.tipo_conta}</div></div>
+                <div><Label>Número do Banco</Label><div>{employee.employee_data.dados_bancarios.numero_banco}</div></div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="uniformes">
+            <Card>
+              <CardHeader>
+                <CardTitle>Uniformes</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><Label>Camiseta</Label><div>{employee.employee_data.tamanhos_uniformes.camiseta}</div></div>
+                <div><Label>Calça</Label><div>{employee.employee_data.tamanhos_uniformes.calca}</div></div>
+                <div><Label>Luva</Label><div>{employee.employee_data.tamanhos_uniformes.luva}</div></div>
+                <div><Label>Bota/Sapato</Label><div>{employee.employee_data.tamanhos_uniformes.bota_sapato}</div></div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="estrangeiro">
+            <Card>
+              <CardHeader>
+                <CardTitle>Estrangeiro</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><Label>Cor</Label><div>{employee.employee_data.informacoes_estrangeiro.cor}</div></div>
+                <div><Label>Peso</Label><div>{employee.employee_data.informacoes_estrangeiro.peso}</div></div>
+                <div><Label>Olhos</Label><div>{employee.employee_data.informacoes_estrangeiro.olhos}</div></div>
+                <div><Label>Altura</Label><div>{employee.employee_data.informacoes_estrangeiro.altura}</div></div>
+                <div><Label>Sinais</Label><div>{employee.employee_data.informacoes_estrangeiro.sinais}</div></div>
+                <div><Label>Cabelos</Label><div>{employee.employee_data.informacoes_estrangeiro.cabelos}</div></div>
+                <div><Label>Naturalizado</Label><div>{employee.employee_data.informacoes_estrangeiro.naturalizado}</div></div>
+                <div><Label>Nome do Cônjuge</Label><div>{employee.employee_data.informacoes_estrangeiro.nome_conjuge}</div></div>
+                <div><Label>Cartão Modelo 19</Label><div>{employee.employee_data.informacoes_estrangeiro.cartao_modelo_19}</div></div>
+                <div><Label>Data de Chegada ao Brasil</Label><div>{employee.employee_data.informacoes_estrangeiro.data_chegada_brasil}</div></div>
+                <div><Label>Casado com Brasileiro(a)</Label><div>{employee.employee_data.informacoes_estrangeiro.casado_com_brasileiro}</div></div>
+                <div><Label>Número Registro Cartório</Label><div>{employee.employee_data.informacoes_estrangeiro.numero_registro_cartorio}</div></div>
+                <div><Label>Quantidade de Filhos no Brasil</Label><div>{employee.employee_data.informacoes_estrangeiro.quantidade_filhos_brasil}</div></div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="upload">
+            <div className="mt-4 grid md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Upload de Documentos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <MultiFileUpload
+                    employeeId={id}
+                    employeeName={employee.employee_data.informacoes_pessoais.nome}
+                    driveLink={employee.drive_link}
+                    onUploadComplete={async (link: string) => {
+                      await EmployeesService.updateEmployee(id, { drive_link: link })
+                      employee.drive_link = link
+                    }}
+                    renderChecklist={setChecklist}
+                  />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Checklist de Documentos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {tiposDocumentos.map(doc => (
+                      <li key={doc.value} className="flex items-center gap-2">
+                        {checklist && checklist[doc.value] ? (
+                          <span className="text-green-500">●</span>
+                        ) : (
+                          <span className="text-muted-foreground">○</span>
+                        )}
+                        <span>{doc.label}</span>
+                        {checklist && checklist[doc.value] && (
+                          <a href={checklist[doc.value]} target="_blank" rel="noopener noreferrer" className="ml-2" title="Abrir documento">
+                            <LinkIcon className="w-4 h-4 text-blue-500 hover:text-blue-700" />
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="ocorrencias">
@@ -598,203 +585,20 @@ export default function EmployeeViewPage() {
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="upload">
-            <div className="mt-4 grid md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upload de Documentos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div
-                    className={`border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-8 mb-6 transition-colors ${dragActive ? 'border-primary bg-muted' : 'border-muted'}`}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <UploadCloud className="w-12 h-12 mb-2 text-muted-foreground" />
-                    <div className="font-medium">Clique ou arraste arquivos aqui</div>
-                    <div className="text-xs text-muted-foreground">Suporta arquivos PDF, JPEG, PNG</div>
-                    <input
-                      type="file"
-                      multiple
-                      ref={fileInputRef}
-                      style={{ display: "none" }}
-                      onChange={handleFileChange}
-                    />
-                  </div>
-                  {uploadedDocs.length > 0 && (
-                    <>
-                      <div className="flex gap-2 mb-2 justify-end">
-                        <Button variant="destructive" size="sm" onClick={() => setUploadedDocs([])}>
-                          Excluir Todos
-                        </Button>
-                        <Button variant="default" size="sm" onClick={() => {/* lógica de envio aqui */}}>
-                          Enviar
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        {uploadedDocs.map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="grid grid-cols-12 items-center gap-2 bg-muted/40 rounded px-2 py-2"
-                            style={{ minHeight: 48 }}
-                          >
-                            <span className="truncate col-span-5 text-sm text-muted-foreground" title={doc.file.name}>
-                              {doc.file.name}
-                            </span>
-                            <div className="col-span-5">
-                              <Select value={doc.tipo} onValueChange={tipo => handleTipoChange(idx, tipo)}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Tipo de Documento" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {tiposDocumentos.map(opt => (
-                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="col-span-2 flex justify-end">
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveDoc(idx)}>
-                                Remover
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Checklist de Documentos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {tiposDocumentos.map(doc => {
-                      // Considera anexado se já existe no documentos_em_anexo ou está na fila de upload
-                      const anexado = (employee.employee_data.documentos_em_anexo?.[doc.value] && employee.employee_data.documentos_em_anexo[doc.value] !== 'N/A') || uploadedDocs.some(d => d.tipo === doc.value)
-                      return (
-                        <li key={doc.value} className="flex items-center gap-2">
-                          {anexado ? (
-                            <CheckCircle className="text-green-500 w-5 h-5" />
-                          ) : (
-                            <Circle className="text-muted-foreground w-5 h-5" />
-                          )}
-                          <span>{doc.label}</span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
 
-      <Dialog open={showOcorrenciaModal} onOpenChange={setShowOcorrenciaModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Nova Ocorrência</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            <div>
-              <Label>Tipo de Ocorrência</Label>
-              <Select
-                value={novaOcorrencia.codigo.toString()}
-                onValueChange={(value) => {
-                  const tipo = {
-                    "101": "Medida Disciplinar",
-                    "102": "Ocorrência",
-                    "103": "Ajuste Salarial",
-                    "104": "Adicional/Bônus",
-                    "105": "Alteração de função",
-                    "106": "Furo de Caixa"
-                  }[value] || "";
-                  setNovaOcorrencia(prev => ({
-                    ...prev,
-                    codigo: parseInt(value),
-                    tipo: tipo
-                  }))
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="101">Medida Disciplinar</SelectItem>
-                  <SelectItem value="102">Ocorrência</SelectItem>
-                  <SelectItem value="103">Ajuste Salarial</SelectItem>
-                  <SelectItem value="104">Adicional/Bônus</SelectItem>
-                  <SelectItem value="105">Alteração de função</SelectItem>
-                  <SelectItem value="106">Furo de Caixa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Data</Label>
-              <Input
-                type="date"
-                value={novaOcorrencia.data.split('/').reverse().join('-')}
-                onChange={(e) => {
-                  const data = new Date(e.target.value).toLocaleDateString('pt-BR')
-                  setNovaOcorrencia(prev => ({ ...prev, data }))
-                }}
-              />
-            </div>
-
-            <div>
-              <Label>Cidade</Label>
-              <Input
-                value={novaOcorrencia.cidade}
-                onChange={(e) => setNovaOcorrencia(prev => ({ ...prev, cidade: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <Label>Ocorrência</Label>
-              <Input
-                value={novaOcorrencia.ocorrencia}
-                onChange={(e) => setNovaOcorrencia(prev => ({ ...prev, ocorrencia: e.target.value }))}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <Label>Motivo</Label>
-              <Textarea
-                value={novaOcorrencia.motivo}
-                onChange={(e) => setNovaOcorrencia(prev => ({ ...prev, motivo: e.target.value }))}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <Label>Observação 2</Label>
-              <Textarea
-                value={novaOcorrencia.observacao_2}
-                onChange={(e) => setNovaOcorrencia(prev => ({ ...prev, observacao_2: e.target.value }))}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <Label>Observação 3</Label>
-              <Textarea
-                value={novaOcorrencia.observacao_3}
-                onChange={(e) => setNovaOcorrencia(prev => ({ ...prev, observacao_3: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOcorrenciaModal(false)}>Cancelar</Button>
-            <Button onClick={handleAddOcorrencia}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OcorrenciaModal
+        open={showOcorrenciaModal || showEditOcorrenciaModal}
+        onOpenChange={open => {
+          setShowOcorrenciaModal(open);
+          setShowEditOcorrenciaModal(open);
+        }}
+        ocorrencia={novaOcorrencia}
+        setOcorrencia={setNovaOcorrencia}
+        onSave={ocorrenciaToEdit !== null ? handleSaveEditOcorrencia : handleAddOcorrencia}
+        isEditing={ocorrenciaToEdit !== null}
+      />
 
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
@@ -817,99 +621,6 @@ export default function EmployeeViewPage() {
             >
               Excluir
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showEditOcorrenciaModal} onOpenChange={setShowEditOcorrenciaModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Ocorrência</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            <div>
-              <Label>Tipo de Ocorrência</Label>
-              <Select
-                value={novaOcorrencia.codigo.toString()}
-                onValueChange={(value) => {
-                  const tipo = {
-                    "101": "Medida Disciplinar",
-                    "102": "Ocorrência",
-                    "103": "Ajuste Salarial",
-                    "104": "Adicional/Bônus",
-                    "105": "Alteração de função",
-                    "106": "Furo de Caixa"
-                  }[value] || "";
-                  setNovaOcorrencia(prev => ({
-                    ...prev,
-                    codigo: parseInt(value),
-                    tipo: tipo
-                  }))
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="101">Medida Disciplinar</SelectItem>
-                  <SelectItem value="102">Ocorrência</SelectItem>
-                  <SelectItem value="103">Ajuste Salarial</SelectItem>
-                  <SelectItem value="104">Adicional/Bônus</SelectItem>
-                  <SelectItem value="105">Alteração de função</SelectItem>
-                  <SelectItem value="106">Furo de Caixa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Data</Label>
-              <Input
-                type="date"
-                value={novaOcorrencia.data.split('/').reverse().join('-')}
-                onChange={e => {
-                  const data = new Date(e.target.value).toLocaleDateString('pt-BR')
-                  setNovaOcorrencia(prev => ({ ...prev, data }))
-                }}
-              />
-            </div>
-            <div>
-              <Label>Cidade</Label>
-              <Input
-                value={novaOcorrencia.cidade}
-                onChange={e => setNovaOcorrencia({ ...novaOcorrencia, cidade: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Ocorrência</Label>
-              <Input
-                value={novaOcorrencia.ocorrencia}
-                onChange={e => setNovaOcorrencia({ ...novaOcorrencia, ocorrencia: e.target.value })}
-              />
-            </div>
-            <div className="col-span-2">
-              <Label>Motivo</Label>
-              <Textarea
-                value={novaOcorrencia.motivo}
-                onChange={e => setNovaOcorrencia({ ...novaOcorrencia, motivo: e.target.value })}
-              />
-            </div>
-            <div className="col-span-2">
-              <Label>Observação 2</Label>
-              <Textarea
-                value={novaOcorrencia.observacao_2}
-                onChange={e => setNovaOcorrencia({ ...novaOcorrencia, observacao_2: e.target.value })}
-              />
-            </div>
-            <div className="col-span-2">
-              <Label>Observação 3</Label>
-              <Textarea
-                value={novaOcorrencia.observacao_3}
-                onChange={e => setNovaOcorrencia({ ...novaOcorrencia, observacao_3: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditOcorrenciaModal(false)}>Cancelar</Button>
-            <Button onClick={handleSaveEditOcorrencia}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -36,6 +36,7 @@ export default function GestaoRH() {
   })
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null)
+  const [employeeDriveLinks, setEmployeeDriveLinks] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (selectedStore) {
@@ -48,11 +49,36 @@ export default function GestaoRH() {
       setLoading(true)
       const data = await EmployeesService.getEmployeesByStore(selectedStore)
       setEmployees(data)
+      
+      // Load drive links from employees data
+      const driveLinks: Record<string, string> = {}
+      data.forEach(emp => {
+        if (emp.drive_link) {
+          driveLinks[emp.id] = emp.drive_link
+        }
+      })
+      setEmployeeDriveLinks(driveLinks)
     } catch (err) {
       setError('Erro ao carregar funcionários')
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDriveLinkUpdate = async (employeeId: string, driveLink: string) => {
+    try {
+      // Update the drive link in the database
+      await EmployeesService.updateEmployee(employeeId, { drive_link: driveLink })
+      
+      // Update local state
+      setEmployeeDriveLinks(prev => ({
+        ...prev,
+        [employeeId]: driveLink
+      }))
+    } catch (err) {
+      console.error('Error updating drive link:', err)
+      toast.error('Erro ao atualizar link do Google Drive')
     }
   }
 
@@ -225,7 +251,12 @@ export default function GestaoRH() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {ativos.map(emp => (
                 <div key={emp.id} className="relative">
-                  <EmployeeFullCard employee={emp.employee_data} employeeId={emp.id} />
+                  <EmployeeFullCard 
+                    employee={emp.employee_data} 
+                    employeeId={emp.id}
+                    driveLink={employeeDriveLinks[emp.id]}
+                    onDriveLinkUpdate={(link) => handleDriveLinkUpdate(emp.id, link)}
+                  />
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
                       variant="ghost"
@@ -254,7 +285,12 @@ export default function GestaoRH() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {inativos.map(emp => (
                 <div key={emp.id} className="relative">
-                  <EmployeeFullCard employee={emp.employee_data} employeeId={emp.id} />
+                  <EmployeeFullCard 
+                    employee={emp.employee_data} 
+                    employeeId={emp.id}
+                    driveLink={employeeDriveLinks[emp.id]}
+                    onDriveLinkUpdate={(link) => handleDriveLinkUpdate(emp.id, link)}
+                  />
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
                       variant="ghost"
@@ -283,7 +319,12 @@ export default function GestaoRH() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {ferias.map(emp => (
                 <div key={emp.id} className="relative">
-                  <EmployeeFullCard employee={emp.employee_data} employeeId={emp.id} />
+                  <EmployeeFullCard 
+                    employee={emp.employee_data} 
+                    employeeId={emp.id}
+                    driveLink={employeeDriveLinks[emp.id]}
+                    onDriveLinkUpdate={(link) => handleDriveLinkUpdate(emp.id, link)}
+                  />
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
                       variant="ghost"
