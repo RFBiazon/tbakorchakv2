@@ -67,6 +67,12 @@ interface SCMControleCaixaProps {
   onSelecionarCaixa?: (caixaObj: any) => void;
 }
 
+// Novo tipo para armazenar id e diferença
+interface ProximoIdDiff {
+  id: number;
+  diff: number;
+}
+
 export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
   const { selectedStore, lojasConfig } = useSelectedStore()
   const [lojaSelecionada, setLojaSelecionada] = useState<string>('')
@@ -79,6 +85,10 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
   const [dadosCaixa, setDadosCaixa] = useState<DadosCaixa | null>(null)
   const [carregandoCaixa, setCarregandoCaixa] = useState(false)
   const [logsApi, setLogsApi] = useState<string[]>([])
+  const [idsFechamentosUsados, setIdsFechamentosUsados] = useState<number[]>([])
+  const [idsAberturasVinculadas, setIdsAberturasVinculadas] = useState<number[]>([])
+  const [idsValoresProximos, setIdsValoresProximos] = useState<ProximoIdDiff[]>([])
+  const [idsFechamentosProximos, setIdsFechamentosProximos] = useState<ProximoIdDiff[]>([])
 
   useEffect(() => {
     if (selectedStore) {
@@ -204,6 +214,53 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
     }
   }
 
+  // Função para verificar se os valores são próximos (diferença <= R$ 2,00)
+  const valoresSaoProximos = (valor1: number, valor2: number): boolean => {
+    return Math.abs(valor1 - valor2) <= 2;
+  };
+
+  const verificarCorrespondenciaAberturaFechamento = (historico: HistoricoCaixa[]) => {
+    const historicoOrdenado = [...historico].sort((a, b) => {
+      const dataA = parseDataAbertura(a.opened_at)?.getTime() || 0;
+      const dataB = parseDataAbertura(b.opened_at)?.getTime() || 0;
+      return dataA - dataB;
+    });
+
+    const novosIdsFechamentosUsados: number[] = [];
+    const novosIdsAberturasVinculadas: number[] = [];
+    const novosIdsValoresProximos: ProximoIdDiff[] = [];
+    const novosIdsFechamentosProximos: ProximoIdDiff[] = [];
+
+    historicoOrdenado.forEach((hist, idx) => {
+      let encontrouCorrespondencia = false;
+      for (let i = 0; i < idx; i++) {
+        const candidato = historicoOrdenado[i];
+        if (!novosIdsFechamentosUsados.includes(candidato.id)) {
+          const valorAbertura = Number(hist.amount_on_open);
+          const valorFechamento = Number(candidato.amount_on_close);
+          
+          if (valorAbertura === valorFechamento) {
+            novosIdsFechamentosUsados.push(candidato.id);
+            novosIdsAberturasVinculadas.push(hist.id);
+            encontrouCorrespondencia = true;
+            break;
+          } else if (valoresSaoProximos(valorAbertura, valorFechamento)) {
+            const diff = Math.abs(valorAbertura - valorFechamento);
+            novosIdsValoresProximos.push({ id: hist.id, diff });
+            novosIdsFechamentosProximos.push({ id: candidato.id, diff });
+            encontrouCorrespondencia = true;
+            break;
+          }
+        }
+      }
+    });
+
+    setIdsFechamentosUsados(novosIdsFechamentosUsados);
+    setIdsAberturasVinculadas(novosIdsAberturasVinculadas);
+    setIdsValoresProximos(novosIdsValoresProximos);
+    setIdsFechamentosProximos(novosIdsFechamentosProximos);
+  };
+
   const buscarMovimentacoesCaixa = async () => {
     setCarregandoCaixa(true)
     setLogsApi([])
@@ -244,6 +301,9 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
         })
       )
 
+      // Verificar correspondência entre aberturas e fechamentos
+      verificarCorrespondenciaAberturaFechamento(historicoComVerificacao);
+
       setDadosCaixa({
         movimentacoes: movimentacoesData.data || [],
         historico: historicoComVerificacao
@@ -268,6 +328,12 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
     dataFinalFiltro.setHours(23, 59, 59, 999);
     return dataAbertura >= dataInicialFiltro && dataAbertura <= dataFinalFiltro;
   }) || [];
+
+  // Função para buscar a diferença exata pelo id
+  const getDiffById = (arr: ProximoIdDiff[], id: number) => {
+    const found = arr.find(item => item.id === id);
+    return found ? found.diff : null;
+  };
 
   return (
     <div className="space-y-4">
@@ -356,57 +422,130 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
                           const dataB = parseDataAbertura(b.opened_at)?.getTime() || 0;
                           return dataA - dataB;
                         });
-                        return historicoOrdenado.map((hist, idx) => (
-                          <TableRow key={hist.id}>
-                            {onSelecionarCaixa && !hist.jaConferido && (
-                              <TableCell>
-                                <Badge 
-                                  className="cursor-pointer bg-orange-500 hover:bg-orange-600 text-white"
-                                  onClick={() => onSelecionarCaixa(hist)}
-                                >
-                                  Selecionar
-                                </Badge>
+                        return historicoOrdenado.map((hist: HistoricoCaixa, idx) => {
+                          const valorAberturaCorresponde = idsAberturasVinculadas.includes(hist.id);
+                          const fechamentoFoiUsado = idsFechamentosUsados.includes(hist.id);
+                          
+                          return (
+                            <TableRow key={hist.id}>
+                              {onSelecionarCaixa && !hist.jaConferido && (
+                                <TableCell>
+                                  <Badge 
+                                    className="cursor-pointer bg-orange-500 hover:bg-orange-600 text-white"
+                                    onClick={() => onSelecionarCaixa(hist)}
+                                  >
+                                    Selecionar
+                                  </Badge>
+                                </TableCell>
+                              )}
+                              {onSelecionarCaixa && hist.jaConferido && (
+                                <TableCell>
+                                  <Badge className="cursor-not-allowed bg-blue-500 hover:bg-blue-600 text-white">
+                                    Conferido
+                                  </Badge>
+                                </TableCell>
+                              )}
+                              <TableCell>{formatarDataBR(hist.opened_at)}</TableCell>
+                              <TableCell className="font-medium text-gray-600">
+                                {formatarPrimeiroNome(hist.opened_user?.full_name)}
                               </TableCell>
-                            )}
-                            {onSelecionarCaixa && hist.jaConferido && (
-                              <TableCell>
-                                <Badge className="cursor-not-allowed bg-blue-500 hover:bg-blue-600 text-white">
-                                  Conferido
-                                </Badge>
+                              <TableCell className="text-right font-mono font-semibold">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <div className="flex items-center justify-end gap-1">
+                                        {formatarMoeda(Number(hist.amount_on_open) || 0)}
+                                        {valorAberturaCorresponde ? (
+                                          <span className="text-green-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        ) : getDiffById(idsValoresProximos, hist.id) !== null ? (
+                                          <span className="text-blue-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        ) : (
+                                          <span className="text-red-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs break-words whitespace-pre-line text-center">
+                                      {valorAberturaCorresponde
+                                        ? 'Abertura corresponde a um fechamento anterior'
+                                        : getDiffById(idsValoresProximos, hist.id) !== null
+                                        ? `Abertura tem valor próximo a um fechamento anterior (diferença: R$ ${getDiffById(idsValoresProximos, hist.id)?.toFixed(2).replace('.', ',')})`
+                                        : 'Sem fechamento anterior correspondente'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               </TableCell>
-                            )}
-                            <TableCell>{formatarDataBR(hist.opened_at)}</TableCell>
-                            <TableCell className="font-medium text-gray-600">
-                              {formatarPrimeiroNome(hist.opened_user?.full_name)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono font-semibold">
-                              {formatarMoeda(Number(hist.amount_on_open) || 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-red-600">
-                              {formatarMoeda(Number(hist.out_result) || 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-green-600">
-                              {formatarMoeda(Number(hist.in_result) || 0)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-white font-semibold">
-                              {formatarMoeda(Number(hist.amount_on_close) || 0)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <span className={`font-mono font-semibold ${Number(hist.result_cash) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {formatarMoeda(Number(hist.result_cash) || 0)}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{hist.observation || 'Sem observação'}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </TableCell>
-                          </TableRow>
-                        ));
+                              <TableCell className="text-right font-mono text-red-600">
+                                {formatarMoeda(Number(hist.out_result) || 0)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-green-600">
+                                {formatarMoeda(Number(hist.in_result) || 0)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-white font-semibold">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <div className="flex items-center justify-end gap-1">
+                                        {formatarMoeda(Number(hist.amount_on_close) || 0)}
+                                        {fechamentoFoiUsado ? (
+                                          <span className="text-green-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        ) : getDiffById(idsFechamentosProximos, hist.id) !== null ? (
+                                          <span className="text-blue-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        ) : (
+                                          <span className="text-red-500">
+                                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                                              <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs break-words whitespace-pre-line text-center">
+                                      {fechamentoFoiUsado
+                                        ? 'Fechamento foi usado para satisfazer uma abertura'
+                                        : getDiffById(idsFechamentosProximos, hist.id) !== null
+                                        ? `Fechamento tem valor próximo a uma abertura posterior (diferença: R$ ${getDiffById(idsFechamentosProximos, hist.id)?.toFixed(2).replace('.', ',')})`
+                                        : 'Fechamento não foi usado para nenhuma abertura'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <span className={`font-mono font-semibold ${Number(hist.result_cash) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        {formatarMoeda(Number(hist.result_cash) || 0)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-lg max-h-40 overflow-y-auto break-words whitespace-pre-line text-center" side="top" align="center">
+                                      <p>{hist.observation || 'Sem observação'}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        });
                       })()}
                     </TableBody>
                   </Table>
@@ -418,4 +557,4 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
       </div>
     </div>
   )
-} 
+}

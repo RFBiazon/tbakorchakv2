@@ -519,7 +519,7 @@ export default function SCMPage() {
                   <label className="block text-xs font-medium mb-1">Observações / Motivo de Furo</label>
                   <Textarea
                     name="observacao"
-                    placeholder="Digite aqui uma observação ou motivo de furo (opcional)"
+                    placeholder="Digite aqui o motivo do furo!"
                     onChange={handleChange}
                     value={form.observacao || ""}
                     onFocus={() => handleFocus('observacao')}
@@ -536,7 +536,7 @@ export default function SCMPage() {
               <div className="mt-6 flex items-center gap-2">
                 <Checkbox checked={getDisplayValue('autorizacao')} onCheckedChange={handleCheckbox} id="autorizacao" />
                 <label htmlFor="autorizacao" className="text-sm">
-                  Eu <span className="font-semibold">{getDisplayValue('operador') || "Nome do Operador"}</span>, declaro, para os devidos fins, que autorizo a <span className="font-semibold">{getDisplayValue('loja') || lojaNome}</span> a efetuar o desconto de quaisquer diferenças apuradas durante a conferência do caixa sob minha responsabilidade.
+                  Eu <span className="font-semibold">{getDisplayValue('operador') || "Nome do Operador"}</span>, declaro para os devidos fins, que autorizo a Loja <span className="font-semibold">{getDisplayValue('loja') || lojaNome}</span> a efetuar o desconto de quaisquer diferenças apuradas durante a conferência do caixa sob minha responsabilidade.
                 </label>
               </div>
               {/* Botão Enviar */}
@@ -705,7 +705,7 @@ export default function SCMPage() {
                     <label className="block text-xs font-medium mb-1">Observações / Motivo de Furo</label>
                     <Textarea
                       name="observacao"
-                      placeholder="Digite aqui uma observação ou motivo de furo (opcional)"
+                      placeholder="Digite aqui uma observação ou motivo de furo!"
                       onChange={handleChange}
                       value={getDisplayValue('observacao')}
                       onFocus={() => handleFocus('observacao')}
