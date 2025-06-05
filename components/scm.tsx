@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useSelectedStore } from "@/hooks/useSelectedStore"
+import { salvarMovimentacaoSCM } from "@/lib/supabase"
 
 interface MovimentacaoCaixa {
   id: number
@@ -54,6 +55,7 @@ interface HistoricoCaixa {
   opened_at?: string
   result_cash?: number | string
   observation?: string
+  jaConferido?: boolean
 }
 
 interface DadosCaixa {
@@ -169,6 +171,39 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
     return data.access_token
   }
 
+  // Função para verificar se o caixa já foi conferido
+  const verificarCaixaConferido = async (caixaId: number, historicoId: number) => {
+    try {
+      if (!caixaId || !historicoId) {
+        console.log("IDs não fornecidos:", { caixaId, historicoId });
+        return false;
+      }
+
+      const supabase = await import("@/lib/supabase")
+      const client = supabase.createSupabaseClient(selectedStore)
+      
+      console.log("Verificando caixa:", { caixaId, historicoId }, "para loja:", selectedStore);
+      
+      const { data, error } = await client
+        .from("scm_movimentacoes")
+        .select("id")
+        .eq("cash_id", caixaId)
+        .eq("historico_id", historicoId)
+        .maybeSingle()
+
+      if (error) {
+        console.error("Erro ao verificar caixa:", error);
+        return false;
+      }
+
+      console.log("Resultado da verificação:", data);
+      return !!data;
+    } catch (e) {
+      console.error("Erro ao verificar caixa:", e);
+      return false;
+    }
+  }
+
   const buscarMovimentacoesCaixa = async () => {
     setCarregandoCaixa(true)
     setLogsApi([])
@@ -193,12 +228,29 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
       })
       if (!historicoResponse.ok) throw new Error(`Erro ao buscar histórico: ${historicoResponse.status}`)
       const historicoData = await historicoResponse.json()
+
+      // Verificar quais caixas já foram conferidos
+      console.log("Iniciando verificação de caixas conferidos...");
+      const historicoComVerificacao = await Promise.all(
+        (historicoData.data || []).map(async (hist: HistoricoCaixa) => {
+          try {
+            const jaConferido = await verificarCaixaConferido(hist.cash_id, hist.id);
+            console.log(`Caixa ${hist.cash_id} (ID: ${hist.id}) - Conferido: ${jaConferido}`);
+            return { ...hist, jaConferido };
+          } catch (e) {
+            console.error(`Erro ao verificar caixa ${hist.cash_id} (ID: ${hist.id}):`, e);
+            return { ...hist, jaConferido: false };
+          }
+        })
+      )
+
       setDadosCaixa({
         movimentacoes: movimentacoesData.data || [],
-        historico: historicoData.data || []
+        historico: historicoComVerificacao
       })
       toast.success('Dados do caixa carregados com sucesso!')
     } catch (error: any) {
+      console.error("Erro completo:", error);
       toast.error('Erro ao carregar dados do caixa: ' + error.message)
     } finally {
       setCarregandoCaixa(false)
@@ -306,11 +358,21 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
                         });
                         return historicoOrdenado.map((hist, idx) => (
                           <TableRow key={hist.id}>
-                            {onSelecionarCaixa && (
+                            {onSelecionarCaixa && !hist.jaConferido && (
                               <TableCell>
-                                <Button size="sm" variant="outline" onClick={() => onSelecionarCaixa(hist)}>
+                                <Badge 
+                                  className="cursor-pointer bg-orange-500 hover:bg-orange-600 text-white"
+                                  onClick={() => onSelecionarCaixa(hist)}
+                                >
                                   Selecionar
-                                </Button>
+                                </Badge>
+                              </TableCell>
+                            )}
+                            {onSelecionarCaixa && hist.jaConferido && (
+                              <TableCell>
+                                <Badge className="cursor-not-allowed bg-blue-500 hover:bg-blue-600 text-white">
+                                  Conferido
+                                </Badge>
                               </TableCell>
                             )}
                             <TableCell>{formatarDataBR(hist.opened_at)}</TableCell>

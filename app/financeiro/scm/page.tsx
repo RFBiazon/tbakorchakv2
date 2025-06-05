@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { salvarMovimentacaoSCM } from "@/lib/supabase"
 import { toast } from "sonner"
 import { SCMControleCaixa } from "@/components/scm"
+import { Badge } from "@/components/ui/badge"
+import { TableCell } from "@/components/ui/table"
 
 function formatCPF(value: string) {
   return value.replace(/\D/g, '').slice(0, 11)
@@ -140,6 +142,8 @@ export default function SCMPage() {
         loja: form.loja || lojaNome,
         operador: form.operador,
         caixa: form.caixa || form.caixaNumero,
+        cash_id: form.cash_id,
+        historico_id: form.historico_id,
         debito_visa: parseBRL(form.debitoVisa),
         debito_master: parseBRL(form.debitoMaster),
         debito_elo: parseBRL(form.debitoElo),
@@ -587,6 +591,12 @@ export default function SCMPage() {
               <DialogDescription>Filtre e selecione o caixa que deseja informar o fechamento.</DialogDescription>
             </DialogHeader>
             <SCMControleCaixa onSelecionarCaixa={(caixaObj: any) => {
+              // Verifica se o caixa já foi conferido
+              if (caixaObj.jaConferido) {
+                toast.error("Este caixa já foi conferido e não pode ser selecionado novamente.");
+                return;
+              }
+
               const novoForm = {
                 dataHoraAbertura: caixaObj.opened_at || '',
                 dataHoraFechamento: caixaObj.closed_at || '',
@@ -595,6 +605,8 @@ export default function SCMPage() {
                 email: caixaObj.opened_user?.email || '',
                 cpf: caixaObj.opened_user?.cpf || '',
                 caixaNumero: caixaNumeroSelecionado || '',
+                cash_id: caixaObj.cash_id,
+                historico_id: caixaObj.id,
                 debitoSistema: caixaObj.balance_history?.debit_card || '',
                 creditoSistema: caixaObj.balance_history?.credit_card || '',
                 pixMaquininha: caixaObj.balance_history?.pix || '',
