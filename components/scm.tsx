@@ -290,11 +290,11 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
                         {onSelecionarCaixa && <TableHead></TableHead>}
                         <TableHead>Data</TableHead>
                         <TableHead>Usuário</TableHead>
-                        <TableHead className="text-right">Caixa</TableHead>
                         <TableHead className="text-right">Abertura</TableHead>
                         <TableHead className="text-right">Saídas</TableHead>
                         <TableHead className="text-right">Entradas</TableHead>
                         <TableHead className="text-right">Fechamento</TableHead>
+                        <TableHead className="text-right">Resultado</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -317,9 +317,6 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
                             <TableCell className="font-medium text-gray-600">
                               {formatarPrimeiroNome(hist.opened_user?.full_name)}
                             </TableCell>
-                            <TableCell className="text-right font-mono text-gray-600">
-                              {hist.cash_id}
-                            </TableCell>
                             <TableCell className="text-right font-mono font-semibold">
                               {formatarMoeda(Number(hist.amount_on_open) || 0)}
                             </TableCell>
@@ -331,6 +328,20 @@ export function SCMControleCaixa({ onSelecionarCaixa }: SCMControleCaixaProps) {
                             </TableCell>
                             <TableCell className="text-right font-mono text-white font-semibold">
                               {formatarMoeda(Number(hist.amount_on_close) || 0)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <span className={`font-mono font-semibold ${Number(hist.result_cash) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                      {formatarMoeda(Number(hist.result_cash) || 0)}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{hist.observation || 'Sem observação'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </TableCell>
                           </TableRow>
                         ));
